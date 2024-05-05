@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">MemoryGame</string>
+    <string name="info">Informació</string>
+    <string name="config">Configuració</string>
+    <string name="game">Partida</string>
+    <string name="pantallaFi">Pantalla final</string>
+    <string name="description">El Memorama, joc de memòria o memory és un joc de taula en la categoria de joc de cartes que consisteix a emparellar naips. Generalment hi ha una sèrie de cartes amb diverses figures en cadascuna d\'elles, les quals estan emparellades, és a dir cada figura està repetida en dues cartes. Aquest joc, com el seu nom indica, serveix per desenvolupar la memòria en recordar on estaven les altres cartes.</string>
+</resources>
