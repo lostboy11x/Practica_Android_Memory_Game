@@ -1,9 +1,10 @@
-package com.example.memorygame
+package com.example.memorygame.Implementation
 
 import android.app.Service
 import android.content.Intent
 import android.media.MediaPlayer
 import android.os.IBinder
+import com.example.memorygame.R
 
 /**
  * Servei per reproduir música de fons.

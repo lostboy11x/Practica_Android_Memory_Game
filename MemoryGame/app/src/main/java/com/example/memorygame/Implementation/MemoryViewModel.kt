@@ -1,9 +1,10 @@
-package com.example.memorygame
+package com.example.memorygame.Implementation
 
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import com.example.memorygame.R
 
 
 /**

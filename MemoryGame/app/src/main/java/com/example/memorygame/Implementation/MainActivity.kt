@@ -1,4 +1,4 @@
-package com.example.memorygame
+package com.example.memorygame.Implementation
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -77,6 +77,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import com.example.memorygame.R
 
 /**
  * Activitat principal que gestiona el joc de Memory.
