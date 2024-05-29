@@ -1,10 +1,16 @@
 package com.example.memorygame.Implementation
 
 
+import android.os.Build
+import androidx.annotation.RequiresApi
+
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.memorygame.R
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 
 /**
@@ -24,8 +30,51 @@ class MemoryViewModel : ViewModel() {
     var playerName: String = ""
 
     /** Llista d'imatges de les cartes disponibles, segons el nivell de dificultat. */
-    private val llistaCartes: MutableList<Int> by lazy {
-        mutableListOf<Int>().apply {
+    private lateinit var llistaCartes: MutableList<Int>
+
+    /**
+     * Estableix el nivell de dificultat del joc.
+     * @param gameDifficulty Nivell de dificultat del joc ("Fàcil", "Intermedi" o "Difícil").
+     */
+    fun uploadDifficulty(gameDifficulty: String) {
+        difficulty = gameDifficulty
+    }
+
+    /**
+     * Obté les imatges de les cartes.
+     * @return Llista d'imatges de les cartes.
+     */
+    fun obtainCardImages(): List<Int> {
+        return cardImages
+    }
+
+    /**
+     * LiveData que conté la llista de cartes en el taulell de joc.
+     */
+    private val cartes: MutableLiveData<MutableList<Cards>> by lazy {
+        MutableLiveData<MutableList<Cards>>()
+    }
+
+    /**
+     * Obté les cartes en el taulell de joc.
+     * @return LiveData que conté la llista de cartes en el taulell de joc.
+     */
+    fun getCards(): LiveData<MutableList<Cards>> {
+        return cartes
+    }
+
+    // Variables d'estat del joc
+    val gameFinished = MutableLiveData<Boolean>(false)
+    private var lockSelection = false
+
+    /**
+     * Carrega les cartes del joc segons la dificultat seleccionada.
+     *
+     * Aquesta funció inicialitza la llista de cartes amb els recursos de les imatges corresponents segons la dificultat
+     * seleccionada pel jugador.
+     */
+    private fun loadCards() {
+        llistaCartes= mutableListOf<Int>().apply {
             when (difficulty) {
                 "Fàcil" -> {
                     addAll(
@@ -73,40 +122,15 @@ class MemoryViewModel : ViewModel() {
     }
 
     /**
-     * Estableix el nivell de dificultat del joc.
-     * @param gameDifficulty Nivell de dificultat del joc ("Fàcil", "Intermedi" o "Difícil").
-     */
-    fun uploadDifficulty(gameDifficulty: String) {
-        difficulty = gameDifficulty
-    }
-
-    /**
-     * Obté les imatges de les cartes.
-     * @return Llista d'imatges de les cartes.
-     */
-    fun obtainCardImages(): List<Int> {
-        return cardImages
-    }
-
-    /**
-     * LiveData que conté la llista de cartes en el taulell de joc.
-     */
-    private val cartes: MutableLiveData<MutableList<Cards>> by lazy {
-        MutableLiveData<MutableList<Cards>>()
-    }
-
-    /**
-     * Obté les cartes en el taulell de joc.
-     * @return LiveData que conté la llista de cartes en el taulell de joc.
-     */
-    fun getCards(): LiveData<MutableList<Cards>> {
-        return cartes
-    }
-
-    /**
-     * Carregar les cartes disponibles i barrejar-les per a la partida.
+     * Carrega les cartes del joc segons la dificultat seleccionada i les barreja.
+     *
+     * Aquesta funció carrega les cartes del joc segons la dificultat seleccionada pel jugador i les barreja aleatòriament
+     * per a la partida. Després de barrejar-les, inicialitza la llista de cartes amb les imatges barrejades i les
+     * actualitza en l'estat de les cartes del joc.
      */
     fun loadCardsAndShuffle() {
+        loadCards()
+
         repeat(2) {
             cardImages.addAll(llistaCartes)
         }
@@ -123,55 +147,51 @@ class MemoryViewModel : ViewModel() {
      * de les cartes que formin una parella.
      * @param id Identificador de la carta seleccionada.
      */
+    @RequiresApi(Build.VERSION_CODES.N)
     fun updateVisibleCardStates(id: String) {
-        val selectedCards: List<Cards>? = cartes.value?.filter { it.isSelected }
-        val selectCount: Int = selectedCards?.size ?: 0
-        var imageFind: Int? = null
+        if (lockSelection) return
 
-        if (selectedCards != null && selectedCards.size == 2) {
+        val list = cartes.value?.map { card ->
+
+            if (card.id == id && !card.isSelected && !card.isMatched) {
+                card.copy(isSelected = true)
+            } else {
+                card
+            }
+        }?.toMutableList() ?: mutableListOf()
+
+        val selectedCards = list.filter { it.isSelected }
+        if (selectedCards.size == 2) {
+            lockSelection = true
             val areMatching = selectedCards[0].imageResourceId == selectedCards[1].imageResourceId
             if (areMatching) {
-                selectedCards.forEach { it.isMatched = true }
+                list.replaceAll { card ->
+                    if (card.id == selectedCards[0].id || card.id == selectedCards[1].id) {
+                        card.copy(isMatched = true, isSelected = false)
+                    } else {
+                        card
+                    }
+                }
+                lockSelection = false
+            } else {
+                viewModelScope.launch {
+                    delay(1)
+                    list.replaceAll { card ->
+                        println(card.id)
+                        if (card.id == selectedCards[0].id || card.id == selectedCards[1].id) {
+                            card.copy(isSelected = false)
+                        } else {
+                            card
+                        }
+                    }
+                    lockSelection = false
+                }
             }
         }
-
-        if (selectCount >= 2) {
-            val hasSameImage: Boolean =
-                selectedCards!![0].imageResourceId == selectedCards[1].imageResourceId
-            if (hasSameImage) {
-                imageFind = selectedCards[0].imageResourceId
-            }
-
-            selectedCards.forEach { it.isSelected = false }
-        }
-
-        val list: MutableList<Cards>? = cartes.value?.map { card ->
-
-            if (selectCount >= 2) {
-                card.isSelected = false
-            }
-
-            if (card.imageResourceId == imageFind) {
-                card.isVisible = false
-                card.isMatched = true
-            }
-
-            if (card.id == id) {
-                card.isSelected = true
-            }
-
-            card
-        } as MutableList<Cards>?
-
-        val visibleCount: Int = list?.count { it.isVisible } ?: 0
-
-        if (visibleCount <= 0) {
-            return
-        }
-
-        cartes.value?.removeAll { true }
         cartes.value = list
+        gameFinished.value = allCardsMatched()
     }
+
 
     /**
      * Comprova si totes les cartes del joc estan emparellades.
@@ -204,8 +224,11 @@ class MemoryViewModel : ViewModel() {
      * Reinicia el joc, netejant les llistes de cartes i el nom del jugador.
      */
     fun restartGame() {
+        gameFinished.value = false
         llistaCartes.clear()
+        cartes.value?.clear()
         cardImages.clear()
+        difficulty = ""
         playerName = ""
     }
 }

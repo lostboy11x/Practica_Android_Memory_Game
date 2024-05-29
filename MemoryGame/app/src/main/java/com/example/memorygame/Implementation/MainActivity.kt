@@ -28,9 +28,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -76,7 +78,10 @@ import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.lifecycle.ViewModelProvider
 import com.example.memorygame.R
 
 /**
@@ -86,7 +91,6 @@ import com.example.memorygame.R
  * @property playerName Nom del jugador actual.
  * @property memoryViewModel ViewModel que gestiona la lògica de negoci del joc.
  * @property globalDifficulty Dificultat global del joc.
- * @property email Adreça d'email introduïda pel jugador per enviar els detalls de la partida.
  * @property musicActive Indica si la música de fons està activada o no.
  * @constructor Crea una nova instància de la classe MainActivity.
  */
@@ -107,11 +111,6 @@ class MainActivity : ComponentActivity() {
     private var globalDifficulty by mutableStateOf("")
 
     /**
-     * Adreça d'email introduïda pel jugador per enviar els detalls de la partida.
-     */
-    private var email = ""
-
-    /**
      * Indica si la música de fons està activada o no.
      */
     private var musicActive = false
@@ -127,6 +126,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MemoryGameTheme {
+                val gameFinished by memoryViewModel.gameFinished.observeAsState(false)
                 val navController = rememberNavController()
 
                 NavHost(navController = navController, startDestination = "start") {
@@ -151,7 +151,7 @@ class MainActivity : ComponentActivity() {
                     composable("loadGame/{useTimer}") { backStackEntry ->
                         val useTimer =
                             backStackEntry.arguments?.getString("useTimer")?.toBoolean() ?: false
-                        LoadGame(navController, memoryViewModel, useTimer)
+                        LoadGame(navController, memoryViewModel, useTimer, gameFinished)
                         if (!musicActive) {
                             startService(Intent(this@MainActivity, MusicService::class.java))
                             musicActive = true
@@ -166,9 +166,7 @@ class MainActivity : ComponentActivity() {
                         GameFinishedScreen(
                             cardsMatched = memoryViewModel.getCardsMatchedCount(),
                             cardsNotMatched = memoryViewModel.getCardsNotMatchedCount(),
-                            email = email,
-                            onEmailChanged = { email = it },
-                            navigateToConfig = { navController.navigate("configuracio") },
+                            navigateToConfig = { navController.popBackStack("configuracio", false) },
                             navigateToExit = { finish() } // Finalizar la aplicación
                         )
                     }
@@ -197,6 +195,7 @@ class MainActivity : ComponentActivity() {
             while (globalDifficulty.isEmpty()) {
                 delay(100)
             }
+            println(globalDifficulty)
             memoryViewModel.uploadDifficulty(globalDifficulty)
             memoryViewModel.loadCardsAndShuffle()
         }
@@ -293,13 +292,15 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun PantallaInfo(onBackPressed: () -> Unit) {
-        Scaffold(topBar = {
-            TopAppBar(
-                title = {
-                    Text(text = stringResource(id = R.string.info))
-                },
-            )
-        }) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(text = stringResource(id = R.string.info))
+                    },
+                )
+            }
+        ) {
             Surface(
                 color = BlueLight,
                 modifier = Modifier.fillMaxSize()
@@ -307,17 +308,22 @@ class MainActivity : ComponentActivity() {
                 Column(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(top = 80.dp)
+                    modifier = Modifier.padding(
+                        top = 0.dp,
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = 16.dp
+                    )
                 ) {
                     Text(
                         text = "Benvingut al joc de MEMORY",
                         style = TextStyle(
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold
-                        )
+                        ),
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(32.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -331,15 +337,18 @@ class MainActivity : ComponentActivity() {
                             textAlign = TextAlign.Justify
                         )
                     }
+
                     Image(
                         painter = painterResource(id = R.drawable.memory_info),
                         contentDescription = "Foto info",
-                        modifier = Modifier.size(250.dp)
+                        modifier = Modifier
+                            .size(250.dp)
+                            .padding(top = 16.dp, bottom = 10.dp)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+
                     Button(
                         onClick = onBackPressed,
-                        modifier = Modifier.padding(horizontal = 8.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
                         elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
@@ -350,6 +359,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
     /**
      * Funció composable que representa la pantalla de configuració del joc Memory.
@@ -397,7 +407,8 @@ class MainActivity : ComponentActivity() {
                         memoryViewModel.playerName = playerName
 
                         // Input per al nom del jugador
-                        Text(text = "Selecciona la dificultad:")
+                        Text(text = "Seleccionar la dificultat:")
+
                         Row(
                             horizontalArrangement = Arrangement.Center,
                             modifier = Modifier.padding(vertical = 8.dp)
@@ -463,13 +474,18 @@ class MainActivity : ComponentActivity() {
         val backgroundColor = if (isSelected) BlueGreen else BlueGreenLight
         val contentColor = if (isSelected) Color.White else Color.Black
 
+        val halfScreenWidth =
+            with(LocalDensity.current) { (LocalConfiguration.current.screenWidthDp.dp / 3) }
+
+        val halfSizeModifier = Modifier.width(halfScreenWidth)
+
         // Mostrar el botó amb la dificultat especificada
         Button(
             onClick = onSelectDifficulty,
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = halfSizeModifier,
             shape = RoundedCornerShape(50),
             colors = ButtonDefaults.buttonColors(backgroundColor, contentColor = contentColor),
-            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
         ) {
             Text(text = text)
         }
@@ -484,16 +500,18 @@ class MainActivity : ComponentActivity() {
      * @param memoryViewModel ViewModel que conté la lògica del joc de Memory.
      * @param useTimer Indica si s'ha d'activar el temporitzador per a la partida.
      */
+    @RequiresApi(Build.VERSION_CODES.N)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "UnrememberedMutableState")
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun LoadGame(
         navController: NavController,
         memoryViewModel: MemoryViewModel,
-        useTimer: Boolean
+        useTimer: Boolean,
+        gameFinished: Boolean
     ) {
         // Estat del temps restant de la partida
-        val remainingTime = remember { mutableLongStateOf(60L) }
+        val remainingTime = remember { mutableLongStateOf(5L) }
 
         // Indica si la partida ha finalitzat
         val gameEnded =
@@ -533,14 +551,14 @@ class MainActivity : ComponentActivity() {
                     .fillMaxSize()
                     .padding(top = 60.dp)
             ) {
-                // Mostrar cartes y graella
+                // Mostrar cartes i graella
                 val cards: List<Cards> by memoryViewModel.getCards().observeAsState(listOf())
                 val cardImages: List<Painter> =
                     memoryViewModel.obtainCardImages().map { painterResource(it) }
                 CardsGrid(cards, cardImages)
 
                 // Navegar a la pantalla de final de partida si la partida ha acabat
-                if (gameEnded.value || memoryViewModel.allCardsMatched()) {
+                if (gameEnded.value || gameFinished) {
                     navController.navigate("gameFinished")
                 }
 
@@ -548,12 +566,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     /**
      * Funció Composable que mostra les cartes del joc de Memory en una graella.
      *
      * @param cards Llista de les cartes del joc.
      * @param cardImages Llista de les imatges de les cartes.
      */
+    @RequiresApi(Build.VERSION_CODES.N)
     @Composable
     fun CardsGrid(cards: List<Cards>, cardImages: List<Painter>) {
         // Resolució del nombre de columnes de la graella basat en la dificultat global del joc
@@ -571,7 +591,7 @@ class MainActivity : ComponentActivity() {
             columns = GridCells.Fixed(columns)
         ) {
             items(cards.size) { cardIndex ->
-                CardItem(cards[cardIndex], cardImages[cardIndex])
+                CardItem(cards[cardIndex], cardImages[cardIndex], onContinueClicked  = {memoryViewModel.updateVisibleCardStates(cards[cardIndex].id)} )
             }
         }
     }
@@ -585,18 +605,19 @@ class MainActivity : ComponentActivity() {
      * @param card La carta que es representarà.
      * @param cardImage La imatge de la carta.
      */
-
     @Composable
-    fun CardItem(card: Cards, cardImage: Painter) {
-        // Estat de rotació de la carta
+    fun CardItem(card: Cards, cardImage: Painter, onContinueClicked: () -> Unit) {
         var rotationState by remember { mutableFloatStateOf(0f) }
 
-        // Angle de rotació animat
         val rotationAngle by animateFloatAsState(
             targetValue = rotationState,
             animationSpec = TweenSpec(durationMillis = 500, easing = FastOutSlowInEasing),
             label = ""
         )
+
+        LaunchedEffect(card.isSelected) {
+            rotationState = if (card.isSelected) 180f else 0f
+        }
 
         Box(
             modifier = Modifier.padding(4.dp)
@@ -605,21 +626,20 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        color = Color.Black.copy(alpha = if (card.isVisible) 0.4F else 0.0F),
+                        color = Color.Black.copy(alpha = if (card.isVisible && !card.isSelected && !card.isMatched) 0.4F else 0.0F),
                         shape = RoundedCornerShape(10.dp)
                     )
                     .clickable {
-                        if (card.isVisible) {
-                            rotationState += 180f
-                            memoryViewModel.updateVisibleCardStates(card.id)
+                        if (card.isVisible && !card.isMatched && !card.isSelected) {
+                            onContinueClicked()
                         }
                     }
                     .graphicsLayer(
                         rotationY = rotationAngle
-                    )
+                    ),
             ) {
                 Image(
-                    painter = if (card.isVisible && !card.isSelected) painterResource(R.drawable.carta_revers) else cardImage,
+                    painter = if ((rotationAngle % 360 < 90 || rotationAngle % 360 > 270) && (!card.isMatched && !card.isSelected)) painterResource(R.drawable.carta_revers) else cardImage,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
@@ -629,6 +649,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
     /**
      * Funció Composable que representa la pantalla de finalització del joc de Memory.
@@ -651,13 +672,13 @@ class MainActivity : ComponentActivity() {
     fun GameFinishedScreen(
         cardsMatched: Int,
         cardsNotMatched: Int,
-        email: String,
-        onEmailChanged: (String) -> Unit,
         navigateToConfig: () -> Unit,
         navigateToExit: () -> Unit
     ) {
         val currentDateTime by remember { mutableStateOf(LocalDateTime.now()) }
         val context = LocalContext.current
+        var email by remember { mutableStateOf("") }
+        val isEmailValid: Boolean = email.isNotBlank();
 
         Scaffold(
             topBar = {
@@ -722,16 +743,15 @@ class MainActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(8.dp))
                         TextField(
                             value = email,
-                            onValueChange = { onEmailChanged(it) },
+                            onValueChange = { newValue -> email = newValue },
                             label = { Text("Email") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(4.dp),
-                            colors = TextFieldDefaults.textFieldColors(
-                                Color.White,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            )
+                            modifier = Modifier
                         )
+                        Text(
+                            text = "Email: $email",
+                            fontSize = 20.sp
+                        )
+
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
@@ -742,7 +762,7 @@ class MainActivity : ComponentActivity() {
                                     append("Cartes encertades: $cardsMatched\n")
                                     append("Cartes no encertades: $cardsNotMatched\n")
                                 }
-                                sendEmail(context, emailContent)
+                                sendEmail(context, emailContent, email)
                             },
                             modifier = Modifier.width(150.dp),
                             shape = RoundedCornerShape(50),
@@ -750,16 +770,20 @@ class MainActivity : ComponentActivity() {
                                 BlueGreen,
                                 contentColor = Color.White
                             ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
+                            enabled = isEmailValid // Només s'habilita si hi ha un email vàlid
                         ) {
                             Text(text = "Enviar Email")
                         }
+
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Tornar a jugar (no funciona, al tornar a la configuració i voler jugar la partida finalitza i vas a la pantalla de fi partida)
+                        // Tornar a jugar
                         Button(
                             onClick = {
+                                globalDifficulty = ""
                                 memoryViewModel.restartGame()
+                                musicActive = false
                                 navigateToConfig()
                             },
                             modifier = Modifier.width(150.dp),
@@ -800,19 +824,22 @@ class MainActivity : ComponentActivity() {
      * predeterminada del dispositiu. El contingut del correu electrònic inclou els detalls de la partida, com ara
      * la data i hora de la partida, el nom del jugador, el nombre de cartes encertades i no encertades.
      *
+     * Després d'enviar el correu electrònic, la pantalla es tornarà a GameFinishedScreen si l'enviament ha estat
+     * exitós.
+     *
      * @param context El context de l'aplicació.
      * @param emailContent El contingut del correu electrònic que s'enviarà.
+     * @param recipientEmail L'email del destinatari.
      */
-    private fun sendEmail(context: Context, emailContent: String) {
-        val intent = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("mailto:")
-            putExtra(
-                Intent.EXTRA_SUBJECT,
-                "Detalls de la partida"
-            )
+    private fun sendEmail(context: Context, emailContent: String, recipientEmail: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "message/rfc822"
+            putExtra(Intent.EXTRA_EMAIL, arrayOf(recipientEmail))
+            putExtra(Intent.EXTRA_SUBJECT, "Detalls de la partida")
             putExtra(Intent.EXTRA_TEXT, emailContent)
         }
-
-        context.startActivity(intent)
+        context.startActivity(Intent.createChooser(intent, "Enviar correu electrònic"))
     }
+
+
 }
