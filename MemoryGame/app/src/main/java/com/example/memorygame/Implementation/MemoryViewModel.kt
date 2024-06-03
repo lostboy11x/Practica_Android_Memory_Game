@@ -42,6 +42,10 @@ class MemoryViewModel : ViewModel() {
         difficulty = gameDifficulty
     }
 
+    fun getDifficulty(): String {
+        return difficulty;
+    }
+
     /**
      * Obté les imatges de les cartes.
      * @return Llista d'imatges de les cartes.
@@ -214,7 +218,7 @@ class MemoryViewModel : ViewModel() {
         llistaCartes.clear()
         cartes.value?.clear()
         cardImages.clear()
-        difficulty = ""
+        //difficulty = ""
         playerName = ""
     }
 }

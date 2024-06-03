@@ -97,11 +97,13 @@ import com.example.memorygame.R
  * @constructor Crea una nova instància de la classe MainActivity.
  */
 class MainActivity : ComponentActivity() {
+
+    var timer: Boolean = false
+
     /**
      * Nom del jugador actual.
      */
-    private var playerName = "Player"   // Si no es posa nom
-
+    private var playerName by mutableStateOf("")
     /**
      * ViewModel que gestiona la lògica de negoci del joc de Memory.
      */
@@ -110,7 +112,7 @@ class MainActivity : ComponentActivity() {
     /**
      * Dificultat global del joc.
      */
-    private var globalDifficulty by mutableStateOf("")
+    private var globalDifficulty = ""
 
     /**
      * Indica si la música de fons està activada o no.
@@ -144,18 +146,14 @@ class MainActivity : ComponentActivity() {
                     // Modifica (Botó)
                     // Pantalla de configuración
                     composable("configuracio") {
-                        LaunchLoadGame()
-                        ConfigurationScreen { useTimer ->
-                            navController.navigate("loadGame/$useTimer")
-                        }
+                        //LaunchLoadGame()
+                        ConfigurationScreen(navController)
                     }
 
                     // Pantalla del joc
                     composable("loadGame/") { backStackEntry ->
                         LaunchLoadGame()    //-
-                        val useTimer =
-                            backStackEntry.arguments?.getString("useTimer")?.toBoolean() ?: false
-                        LoadGame(navController, memoryViewModel, useTimer, gameFinished)
+                        LoadGame(navController, memoryViewModel, gameFinished)
                         if (!musicActive) {
                             startService(Intent(this@MainActivity, MusicService::class.java))
                             musicActive = true
@@ -170,8 +168,12 @@ class MainActivity : ComponentActivity() {
                         GameFinishedScreen(
                             cardsMatched = memoryViewModel.getCardsMatchedCount(),
                             cardsNotMatched = memoryViewModel.getCardsNotMatchedCount(),
-                            navigateToConfig = { navController.popBackStack("configuracio", false) },
-                            navigateToExit = { finish() } // Finalizar la aplicación
+                            navigateToGame = { navController.popBackStack("loadGame/", false) },
+                            navigateToExit = { finish() },
+                            navigateToConfig = {
+                                navController.navigate(
+                                    "configuracio")
+                            },
                         )
                     }
 
@@ -200,7 +202,9 @@ class MainActivity : ComponentActivity() {
             while (globalDifficulty.isEmpty()) {
                 delay(100)
             }*/
-            globalDifficulty = "Intermedia"
+            if (globalDifficulty.isEmpty()) {
+                globalDifficulty = "Intermedia"
+            }
             memoryViewModel.uploadDifficulty(globalDifficulty)
             memoryViewModel.loadCardsAndShuffle()
         }
@@ -237,17 +241,23 @@ class MainActivity : ComponentActivity() {
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.smallTopAppBarColors(
-                        BlueLight),
+                        BlueLight
+                    ),
                     title = {
-                        Box(modifier = Modifier.fillMaxWidth()) // Esto empuja el botón hacia la derecha
+                        Box(modifier = Modifier.fillMaxWidth())
                     },
                     actions = {
-                        Button(onClick = { navigateToConfig() },
+                        Button(
+                            onClick = { navigateToConfig() },
                             shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
                             elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
-                        ){
-                            val logo: Painter = painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
+                        ) {
+                            val logo: Painter =
+                                painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
                             Icon(
                                 painter = logo,
                                 contentDescription = "Logo",
@@ -408,9 +418,10 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun ConfigurationScreen(navigateToLoadGame: (useTimer: Boolean) -> Unit) {
+    fun ConfigurationScreen(navController: NavController) {
         var selectedDifficulty by remember { mutableStateOf("") }
         var useTimer by remember { mutableStateOf(false) }
+        var name: String by remember { mutableStateOf("") }
 
         Scaffold(
             topBar = {
@@ -432,12 +443,22 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(16.dp)
                     ) {
                         // Nom jugador
-                        TextField(
-                            value = playerName,
-                            onValueChange = { playerName = it },
-                            label = { Text("Nom del Jugador") },
-                            modifier = Modifier.padding(16.dp)
+                        Text(
+                            text = "Nom del jugador",
+                            fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextField(
+                            value = name,
+                            onValueChange = { newValue -> name = newValue },
+                            label = { Text("Nom del jugador") },
+                            modifier = Modifier,
+                        )
+                        playerName = name
+
+                        if(playerName.isEmpty()) {
+                            playerName = "Player"
+                        }
 
                         memoryViewModel.playerName = playerName
 
@@ -476,12 +497,16 @@ class MainActivity : ComponentActivity() {
                         Button(
                             onClick = {
                                 globalDifficulty = selectedDifficulty
-                                onBackPressed()
+                                timer = useTimer
+                                navController.popBackStack()
                             },
                             //enabled = selectedDifficulty.isNotEmpty() && playerName.isNotEmpty(),
                             modifier = Modifier.width(150.dp),
                             shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
                             elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
                         ) {
                             Text(text = "Tornar enrere")
@@ -539,7 +564,6 @@ class MainActivity : ComponentActivity() {
     fun LoadGame(
         navController: NavController,
         memoryViewModel: MemoryViewModel,
-        useTimer: Boolean,
         gameFinished: Boolean
     ) {
         // Estat del temps restant de la partida
@@ -550,7 +574,7 @@ class MainActivity : ComponentActivity() {
             remember { mutableStateOf(false) }
 
         // Iniciar el temporitzador si s'activa i la partida no ha acabat
-        if (useTimer && !gameEnded.value) {
+        if (timer && !gameEnded.value) {
             LaunchedEffect(key1 = true) {
                 while (remainingTime.longValue > 0) {
                     delay(1000)
@@ -573,7 +597,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     actions = {
-                        if (useTimer) Text(text = "Time: ${remainingTime.longValue} sec")
+                        if (timer) Text(text = "Time: ${remainingTime.longValue} sec")
                     }
                 )
             }
@@ -623,7 +647,10 @@ class MainActivity : ComponentActivity() {
             columns = GridCells.Fixed(columns)
         ) {
             items(cards.size) { cardIndex ->
-                CardItem(cards[cardIndex], cardImages[cardIndex], onContinueClicked  = {memoryViewModel.updateVisibleCardStates(cards[cardIndex].id)} )
+                CardItem(
+                    cards[cardIndex],
+                    cardImages[cardIndex],
+                    onContinueClicked = { memoryViewModel.updateVisibleCardStates(cards[cardIndex].id) })
             }
         }
     }
@@ -705,8 +732,9 @@ class MainActivity : ComponentActivity() {
     fun GameFinishedScreen(
         cardsMatched: Int,
         cardsNotMatched: Int,
-        navigateToConfig: () -> Unit,
-        navigateToExit: () -> Unit
+        navigateToGame: () -> Unit,
+        navigateToExit: () -> Unit,
+        navigateToConfig: () -> Unit
     ) {
         val currentDateTime by remember { mutableStateOf(LocalDateTime.now()) }
         val context = LocalContext.current
@@ -717,18 +745,24 @@ class MainActivity : ComponentActivity() {
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.smallTopAppBarColors(
-                        BlueLight),
+                        BlueLight
+                    ),
                     title = {
                         Text(text = stringResource(id = R.string.pantallaFi))
                         Box(modifier = Modifier.fillMaxWidth()) // Esto empuja el botón hacia la derecha
                     },
                     actions = {
-                        Button(onClick = { navigateToConfig() },
+                        Button(
+                            onClick = { navigateToConfig() },
                             shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
                             elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
-                        ){
-                            val logo: Painter = painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
+                        ) {
+                            val logo: Painter =
+                                painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
                             Icon(
                                 painter = logo,
                                 contentDescription = "Logo",
@@ -831,10 +865,9 @@ class MainActivity : ComponentActivity() {
                         // Tornar a jugar
                         Button(
                             onClick = {
-                                globalDifficulty = ""
                                 memoryViewModel.restartGame()
                                 musicActive = false
-                                navigateToConfig()
+                                navigateToGame()
                             },
                             modifier = Modifier.width(150.dp),
                             shape = RoundedCornerShape(50),
