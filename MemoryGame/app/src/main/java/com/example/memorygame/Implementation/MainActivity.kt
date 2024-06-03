@@ -38,12 +38,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -234,9 +236,24 @@ class MainActivity : ComponentActivity() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    {
-                        Button(onClick = { navigateToConfig() }) {
-
+                    colors = TopAppBarDefaults.smallTopAppBarColors(
+                        BlueLight),
+                    title = {
+                        Box(modifier = Modifier.fillMaxWidth()) // Esto empuja el botón hacia la derecha
+                    },
+                    actions = {
+                        Button(onClick = { navigateToConfig() },
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
+                        ){
+                            val logo: Painter = painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
+                            Icon(
+                                painter = logo,
+                                contentDescription = "Logo",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(45.dp)
+                            )
                         }
                     }
                 )
@@ -455,22 +472,19 @@ class MainActivity : ComponentActivity() {
                             Text(text = "Activar temporitzador")
                         }
 
-                        // Botó per iniciar la partida
+                        // Botó per tornar enrere
                         Button(
                             onClick = {
                                 globalDifficulty = selectedDifficulty
-                                navigateToLoadGame(useTimer)
+                                onBackPressed()
                             },
-                            enabled = selectedDifficulty.isNotEmpty() && playerName.isNotEmpty(),
+                            //enabled = selectedDifficulty.isNotEmpty() && playerName.isNotEmpty(),
                             modifier = Modifier.width(150.dp),
                             shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
+                            colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
                             elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
                         ) {
-                            Text(text = "Iniciar Partida")
+                            Text(text = "Tornar enrere")
                         }
                     }
                 }
@@ -702,10 +716,27 @@ class MainActivity : ComponentActivity() {
         Scaffold(
             topBar = {
                 TopAppBar(
+                    colors = TopAppBarDefaults.smallTopAppBarColors(
+                        BlueLight),
                     title = {
                         Text(text = stringResource(id = R.string.pantallaFi))
+                        Box(modifier = Modifier.fillMaxWidth()) // Esto empuja el botón hacia la derecha
                     },
-                    Modifier.background(BlueLight)
+                    actions = {
+                        Button(onClick = { navigateToConfig() },
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
+                        ){
+                            val logo: Painter = painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
+                            Icon(
+                                painter = logo,
+                                contentDescription = "Logo",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(45.dp)
+                            )
+                        }
+                    }
                 )
             },
             modifier = Modifier.fillMaxSize(),
