@@ -9,8 +9,10 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.memorygame.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 /**
@@ -65,7 +67,6 @@ class MemoryViewModel : ViewModel() {
 
     // Variables d'estat del joc
     val gameFinished = MutableLiveData<Boolean>(false)
-    private var lockSelection = false
 
     /**
      * Carrega les cartes del joc segons la dificultat seleccionada.
@@ -74,7 +75,7 @@ class MemoryViewModel : ViewModel() {
      * seleccionada pel jugador.
      */
     private fun loadCards() {
-        llistaCartes= mutableListOf<Int>().apply {
+        llistaCartes = mutableListOf<Int>().apply {
             when (difficulty) {
                 "Fàcil" -> {
                     addAll(
@@ -85,6 +86,7 @@ class MemoryViewModel : ViewModel() {
                         )
                     )
                 }
+
                 "Intermedia" -> {
                     addAll(
                         listOf(
@@ -99,6 +101,7 @@ class MemoryViewModel : ViewModel() {
                         )
                     )
                 }
+
                 "Difícil" -> {
                     addAll(
                         listOf(
@@ -130,7 +133,6 @@ class MemoryViewModel : ViewModel() {
      */
     fun loadCardsAndShuffle() {
         loadCards()
-
         repeat(2) {
             cardImages.addAll(llistaCartes)
         }
@@ -147,49 +149,33 @@ class MemoryViewModel : ViewModel() {
      * de les cartes que formin una parella.
      * @param id Identificador de la carta seleccionada.
      */
-    @RequiresApi(Build.VERSION_CODES.N)
+
     fun updateVisibleCardStates(id: String) {
-        if (lockSelection) return
-
-        val list = cartes.value?.map { card ->
-
-            if (card.id == id && !card.isSelected && !card.isMatched) {
-                card.copy(isSelected = true)
-            } else {
-                card
+        val list: MutableList<Cards>? = cartes.value?.map { card ->
+            if (card.id == id) {
+                card.isSelected = true
             }
-        }?.toMutableList() ?: mutableListOf()
 
-        val selectedCards = list.filter { it.isSelected }
-        if (selectedCards.size == 2) {
-            lockSelection = true
-            val areMatching = selectedCards[0].imageResourceId == selectedCards[1].imageResourceId
+            card
+        } as MutableList<Cards>?
+        val selectedCards: List<Cards>? = list?.filter { it.isSelected }
+
+        if (selectedCards != null && selectedCards.size == 2) {
+            val areMatching =
+                selectedCards[0].imageResourceId == selectedCards[1].imageResourceId
             if (areMatching) {
-                list.replaceAll { card ->
-                    if (card.id == selectedCards[0].id || card.id == selectedCards[1].id) {
-                        card.copy(isMatched = true, isSelected = false)
-                    } else {
-                        card
-                    }
-                }
-                lockSelection = false
-            } else {
-                viewModelScope.launch {
-                    delay(1)
-                    list.replaceAll { card ->
-                        println(card.id)
-                        if (card.id == selectedCards[0].id || card.id == selectedCards[1].id) {
-                            card.copy(isSelected = false)
-                        } else {
-                            card
-                        }
-                    }
-                    lockSelection = false
-                }
+                selectedCards.forEach { it.isMatched = true }
             }
+            selectedCards.forEach { it.isSelected = false }
         }
+
+        //println("Final" + selectedCards?.size)
+
+        cartes.value?.removeAll { true }
         cartes.value = list
         gameFinished.value = allCardsMatched()
+
+
     }
 
 

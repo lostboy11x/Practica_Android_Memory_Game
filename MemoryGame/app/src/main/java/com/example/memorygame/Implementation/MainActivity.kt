@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity() {
     /**
      * Nom del jugador actual.
      */
-    private var playerName by mutableStateOf("")
+    private var playerName = "Player"   // Si no es posa nom
 
     /**
      * ViewModel que gestiona la lògica de negoci del joc de Memory.
@@ -133,12 +133,13 @@ class MainActivity : ComponentActivity() {
                     // Pantalla inicial
                     composable("start") {
                         StartScreen(
-                            navigateToConfig = { navController.navigate("configuracio") }, // Cambiado
+                            navigateToConfig = { navController.navigate("configuracio") },
                             navigateToInfo = { navController.navigate("info") },
-                            navigateToExit = { navController.navigate("exit") }
+                            navigateToExit = { navController.navigate("exit") },
+                            navigateToGame = { navController.navigate("loadGame/") },
                         )
                     }
-
+                    // Modifica (Botó)
                     // Pantalla de configuración
                     composable("configuracio") {
                         LaunchLoadGame()
@@ -148,7 +149,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // Pantalla del joc
-                    composable("loadGame/{useTimer}") { backStackEntry ->
+                    composable("loadGame/") { backStackEntry ->
+                        LaunchLoadGame()    //-
                         val useTimer =
                             backStackEntry.arguments?.getString("useTimer")?.toBoolean() ?: false
                         LoadGame(navController, memoryViewModel, useTimer, gameFinished)
@@ -192,10 +194,11 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun LaunchLoadGame() {
         LaunchedEffect(Unit) {
+            /*
             while (globalDifficulty.isEmpty()) {
                 delay(100)
-            }
-            println(globalDifficulty)
+            }*/
+            globalDifficulty = "Intermedia"
             memoryViewModel.uploadDifficulty(globalDifficulty)
             memoryViewModel.loadCardsAndShuffle()
         }
@@ -218,65 +221,80 @@ class MainActivity : ComponentActivity() {
      * @param navigateToInfo Funció de callback per navegar a la pantalla d'informació.
      * @param navigateToExit Funció de callback per sortir del joc.
      */
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    @OptIn(ExperimentalMaterial3Api::class)
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun StartScreen(
         navigateToConfig: () -> Unit,
         navigateToInfo: () -> Unit,
-        navigateToExit: () -> Unit
+        navigateToExit: () -> Unit,
+        navigateToGame: () -> Unit
     ) {
-        Surface(
-            color = BlueLight,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Column(
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    {
+                        Button(onClick = { navigateToConfig() }) {
 
-                ) {
-                Text(
-                    text = "Memory Game",
-                    style = TextStyle(
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                        }
+                    }
                 )
-                Spacer(modifier = Modifier.height(32.dp))
+            }
+        ) {
+            Surface(
+                color = BlueLight,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
 
-                // Botó per començar el joc: Start Game -> Configuració -> LoadGame
-                Button(
-                    onClick = { navigateToConfig() },
-                    modifier = Modifier.width(150.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
-                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
-                ) {
-                    Text(text = "Start Game")
-                }
+                    ) {
+                    Text(
+                        text = "Memory Game",
+                        style = TextStyle(
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(32.dp))
 
-                // Botó per accedir a la pantalla d'informació
-                Spacer(modifier = Modifier.height(16.dp)) // Espai entre els botons
-                Button(
-                    onClick = { navigateToInfo() }, modifier = Modifier.width(150.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
-                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
-                ) {
-                    Text(text = "Informació")
-                }
+                    // Botó per començar el joc: Start Game -> Configuració -> LoadGame
+                    Button(
+                        onClick = { navigateToGame() },
+                        modifier = Modifier.width(150.dp),
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                        elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text(text = "Start Game")
+                    }
 
-                // Botó per sortir del joc
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { navigateToExit() }, modifier = Modifier.width(150.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
-                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
-                ) {
-                    Text(text = "Sortir del joc")
+                    // Botó per accedir a la pantalla d'informació
+                    Spacer(modifier = Modifier.height(16.dp)) // Espai entre els botons
+                    Button(
+                        onClick = { navigateToInfo() }, modifier = Modifier.width(150.dp),
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                        elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text(text = "Informació")
+                    }
+
+                    // Botó per sortir del joc
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { navigateToExit() }, modifier = Modifier.width(150.dp),
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
+                        elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                    ) {
+                        Text(text = "Sortir del joc")
+                    }
                 }
             }
         }
@@ -639,7 +657,8 @@ class MainActivity : ComponentActivity() {
                     ),
             ) {
                 Image(
-                    painter = if ((rotationAngle % 360 < 90 || rotationAngle % 360 > 270) && (!card.isMatched && !card.isSelected)) painterResource(R.drawable.carta_revers) else cardImage,
+                    //painter = if ((rotationAngle % 360 < 90 || rotationAngle % 360 > 270) && (!card.isMatched && !card.isSelected)) painterResource(R.drawable.carta_revers) else cardImage,
+                    painter = if (!card.isMatched && !card.isSelected) painterResource(R.drawable.carta_revers) else cardImage,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
@@ -840,6 +859,4 @@ class MainActivity : ComponentActivity() {
         }
         context.startActivity(Intent.createChooser(intent, "Enviar correu electrònic"))
     }
-
-
 }
