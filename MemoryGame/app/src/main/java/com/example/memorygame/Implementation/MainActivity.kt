@@ -1101,6 +1101,8 @@ class MainActivity : ComponentActivity() {
             }
         )
     }*/
+
+    // Revisar:
     @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "CoroutineCreationDuringComposition")
     @OptIn(ExperimentalMaterial3Api::class)
