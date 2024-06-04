@@ -3,8 +3,6 @@ package com.example.memorygame.Implementation
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -30,28 +28,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
@@ -91,9 +89,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.lifecycle.ViewModelProvider
-import androidx.window.layout.WindowMetricsCalculator
+import androidx.lifecycle.lifecycleScope
+import com.example.memorygame.DataBase.AppDatabase
+import com.example.memorygame.DataBase.Partida
 import com.example.memorygame.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * Activitat principal que gestiona el joc de Memory.
@@ -113,6 +116,7 @@ class MainActivity : ComponentActivity() {
      * Nom del jugador actual.
      */
     private var playerName by mutableStateOf("")
+
     /**
      * ViewModel que gestiona la lògica de negoci del joc de Memory.
      */
@@ -181,8 +185,17 @@ class MainActivity : ComponentActivity() {
                             navigateToExit = { finish() },
                             navigateToConfig = {
                                 navController.navigate(
-                                    "configuracio")
+                                    "configuracio"
+                                )
                             },
+                            navigateToSavedGames = { navController.navigate("savedGames") }
+                        )
+                    }
+
+                    // Saved Games
+                    composable("savedGames") {
+                        SavedGamesScreen(
+                            navigateBack = { navController.popBackStack() }
                         )
                     }
 
@@ -465,7 +478,7 @@ class MainActivity : ComponentActivity() {
                         )
                         playerName = name
 
-                        if(playerName.isEmpty()) {
+                        if (playerName.isEmpty()) {
                             playerName = "Player"
                         }
 
@@ -634,6 +647,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }*/
+
     @RequiresApi(Build.VERSION_CODES.N)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "UnrememberedMutableState")
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
@@ -770,13 +784,13 @@ class MainActivity : ComponentActivity() {
     }
 
 
-
     /**
      * Funció Composable que mostra les cartes del joc de Memory en una graella.
      *
      * @param cards Llista de les cartes del joc.
      * @param cardImages Llista de les imatges de les cartes.
      */
+
     @RequiresApi(Build.VERSION_CODES.N)
     @Composable
     fun CardsGrid(cards: List<Cards>, cardImages: List<Painter>) {
@@ -791,7 +805,7 @@ class MainActivity : ComponentActivity() {
         // Graella LazyVerticalGrid per mostrar les cartes
         LazyVerticalGrid(
             modifier = Modifier.fillMaxSize(),
-            //contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             columns = GridCells.Fixed(columns)
         ) {
             items(cards.size) { cardIndex ->
@@ -873,8 +887,9 @@ class MainActivity : ComponentActivity() {
      * @param navigateToConfig La funció per navegar a la pantalla de configuració del joc.
      * @param navigateToExit La funció per sortir del joc.
      */
+    /*
     @RequiresApi(Build.VERSION_CODES.O)
-    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "CoroutineCreationDuringComposition")
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun GameFinishedScreen(
@@ -882,12 +897,36 @@ class MainActivity : ComponentActivity() {
         cardsNotMatched: Int,
         navigateToGame: () -> Unit,
         navigateToExit: () -> Unit,
-        navigateToConfig: () -> Unit
+        navigateToConfig: () -> Unit,
+        navigateToSavedGames: () -> Unit
     ) {
         val currentDateTime by remember { mutableStateOf(LocalDateTime.now()) }
         val context = LocalContext.current
         var email by remember { mutableStateOf("") }
-        val isEmailValid: Boolean = email.isNotBlank();
+        val isEmailValid: Boolean = email.isNotBlank()
+
+        // Obtenir una instància de la base de dades i del DAO
+        val db = AppDatabase.getDatabase(context)
+        val partidaDao = db.partidaDao()
+
+        // Crear una nova partida amb les dades de la partida actual
+        val partida = Partida(
+            id = 0, // Auto-generate ID
+            nomJugador = playerName,
+            dataHora = currentDateTime.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")),
+            temporitzador = timer, // Canvia aquest valor segons la teva lògica de joc
+            dificultat = globalDifficulty, // Canvia aquest valor segons la teva lògica de joc
+            numeroCartes = cardsMatched + cardsNotMatched,
+            cartesEncertades = cardsMatched,
+            cartesNoEncertades = cardsNotMatched
+        )
+
+        // Guardar la partida a la base de dades
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) {
+                partidaDao.insert(partida)
+            }
+        }
 
         Scaffold(
             topBar = {
@@ -897,7 +936,7 @@ class MainActivity : ComponentActivity() {
                     ),
                     title = {
                         Text(text = stringResource(id = R.string.pantallaFi))
-                        Box(modifier = Modifier.fillMaxWidth()) // Esto empuja el botón hacia la derecha
+                        Box(modifier = Modifier.fillMaxWidth())
                     },
                     actions = {
                         Button(
@@ -910,7 +949,7 @@ class MainActivity : ComponentActivity() {
                             elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
                         ) {
                             val logo: Painter =
-                                painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
+                                painterResource(id = R.drawable.settings_logo)
                             Icon(
                                 painter = logo,
                                 contentDescription = "Logo",
@@ -1029,6 +1068,21 @@ class MainActivity : ComponentActivity() {
                         }
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        // Veure partides guardades
+                        Button(
+                            onClick = navigateToSavedGames,
+                            modifier = Modifier.width(150.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                        ) {
+                            Text(text = "Veure partides guardades")
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         // Finalitzar l'aplicació
                         Button(
                             onClick = navigateToExit,
@@ -1042,6 +1096,309 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Text(text = "Sortir del joc")
                         }
+                    }
+                }
+            }
+        )
+    }*/
+    @RequiresApi(Build.VERSION_CODES.O)
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "CoroutineCreationDuringComposition")
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun GameFinishedScreen(
+        cardsMatched: Int,
+        cardsNotMatched: Int,
+        navigateToGame: () -> Unit,
+        navigateToExit: () -> Unit,
+        navigateToConfig: () -> Unit,
+        navigateToSavedGames: () -> Unit
+    ) {
+        val currentDateTime by remember { mutableStateOf(LocalDateTime.now()) }
+        val context = LocalContext.current
+        var email by remember { mutableStateOf("") }
+        val isEmailValid: Boolean = email.isNotBlank()
+        val coroutineScope = rememberCoroutineScope()
+
+        // Obtén una instancia de la base de datos y del DAO
+        val db = AppDatabase.getDatabase(context)
+        val partidaDao = db.partidaDao()
+
+        // Crear una nova partida amb les dades de la partida actual
+        val partida = Partida(
+            id = 0, // Auto-generate ID
+            nomJugador = playerName,
+            dataHora = currentDateTime.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")),
+            temporitzador = timer, // Cambia este valor según tu lógica de juego
+            dificultat = globalDifficulty, // Cambia este valor según tu lógica de juego
+            numeroCartes = cardsMatched + cardsNotMatched,
+            cartesEncertades = cardsMatched,
+            cartesNoEncertades = cardsNotMatched
+        )
+
+        // Utilizar una coroutine para realizar la verificación e inserción
+        lifecycleScope.launch {
+            // Verificar si la partida ya está en la base de datos
+            val existingPartida = partidaDao.getPartidaById(partida.id)
+            if (existingPartida == null) {
+                // La partida no existe, así que la insertamos
+                partidaDao.insertIfNotExists(partida)
+            }
+        }
+
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.smallTopAppBarColors(
+                        BlueLight
+                    ),
+                    title = {
+                        Text(text = stringResource(id = R.string.pantallaFi))
+                        Box(modifier = Modifier.fillMaxWidth())
+                    },
+                    actions = {
+                        Button(
+                            onClick = { navigateToConfig() },
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
+                        ) {
+                            val logo: Painter =
+                                painterResource(id = R.drawable.settings_logo)
+                            Icon(
+                                painter = logo,
+                                contentDescription = "Logo",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(45.dp)
+                            )
+                        }
+                    }
+                )
+            },
+            modifier = Modifier.fillMaxSize(),
+            content = {
+                Surface(
+                    color = BlueLight,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "¡Fi de la partida!",
+                            style = TextStyle(fontSize = 24.sp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        val formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")
+                        Text(
+                            text = "Data i hora: ${currentDateTime.format(formatter)}"
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Mostrar valors del registre de la partida
+                        Text(
+                            text = "Valors del registre de la partida:",
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = buildAnnotatedString {
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append("Nom del jugador: ")
+                                }
+                                append("$playerName, ")
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append("Cartes encertades: ")
+                                }
+                                append("$cardsMatched, ")
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append("Cartes no encertades: ")
+                                }
+                                append("$cardsNotMatched")
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Email
+                        Text(
+                            text = "Email del destinatari",
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextField(
+                            value = email,
+                            onValueChange = { newValue -> email = newValue },
+                            label = { Text("Email") },
+                            modifier = Modifier
+                        )
+                        Text(
+                            text = "Email: $email",
+                            fontSize = 20.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                val emailContent = buildString {
+                                    append("Data i hora: $currentDateTime\n")
+                                    append("Nom jugador: $playerName\n")
+                                    append("Cartes encertades: $cardsMatched\n")
+                                    append("Cartes no encertades: $cardsNotMatched\n")
+                                }
+                                sendEmail(context, emailContent, email)
+                            },
+                            modifier = Modifier.width(150.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
+                            enabled = isEmailValid // Només s'habilita si hi ha un email vàlid
+                        ) {
+                            Text(text = "Enviar Email")
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Tornar a jugar
+                        Button(
+                            onClick = {
+                                memoryViewModel.restartGame()
+                                musicActive = false
+                                navigateToGame()
+                            },
+                            modifier = Modifier.width(150.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                        ) {
+                            Text(text = "Tornar a jugar")
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Veure partides guardades
+                        Button(
+                            onClick = navigateToSavedGames,
+                            modifier = Modifier.width(150.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                        ) {
+                            Text(text = "Veure partides guardades")
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Finalitzar l'aplicació
+                        Button(
+                            onClick = navigateToExit,
+                            modifier = Modifier.width(150.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(
+                                BlueGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                        ) {
+                            Text(text = "Sortir del joc")
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+
+    // Aquesta és la teva funció savedGames que obté les partides guardades de la base de dades
+    suspend fun savedGames(): List<Partida> {
+        // Aquí es crida a la funció que obté les partides guardades de la base de dades
+        return AppDatabase.getDatabase(this).partidaDao().getPartides().value ?: listOf()
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    @Composable
+    fun SavedGamesScreen(
+        navigateBack: () -> Unit
+    ) {
+        val context = LocalContext.current
+        val db = AppDatabase.getDatabase(context)
+        val partidaDao = db.partidaDao()
+        val savedGames by partidaDao.getPartides().observeAsState(initial = emptyList())
+        val coroutineScope = rememberCoroutineScope()
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Partides Guardades") },
+                    navigationIcon = {
+                        IconButton(onClick = navigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                )
+            },
+            content = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Partides Guardades",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    // Mostrar les partides guardades
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(savedGames) { partida ->
+                            Text(text = "Partida ${partida.id}: ${partida.nomJugador}, ${partida.dificultat},  ${partida.dataHora}")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Botó per esborrar totes les partides guardades
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                partidaDao.deleteAll()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Esborrar totes les partides")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Botó per tornar enrere
+                    Button(
+                        onClick = navigateBack,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Tornar Enrere")
                     }
                 }
             }
@@ -1072,3 +1429,8 @@ class MainActivity : ComponentActivity() {
         context.startActivity(Intent.createChooser(intent, "Enviar correu electrònic"))
     }
 }
+
+
+
+
+
