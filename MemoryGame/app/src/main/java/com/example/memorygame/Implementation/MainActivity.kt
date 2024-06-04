@@ -3,6 +3,7 @@ package com.example.memorygame.Implementation
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -46,6 +49,11 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,6 +92,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.ViewModelProvider
+import androidx.window.layout.WindowMetricsCalculator
 import com.example.memorygame.R
 
 /**
@@ -557,15 +566,19 @@ class MainActivity : ComponentActivity() {
      * @param memoryViewModel ViewModel que conté la lògica del joc de Memory.
      * @param useTimer Indica si s'ha d'activar el temporitzador per a la partida.
      */
+    /*
     @RequiresApi(Build.VERSION_CODES.N)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "UnrememberedMutableState")
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     @Composable
     fun LoadGame(
         navController: NavController,
         memoryViewModel: MemoryViewModel,
         gameFinished: Boolean
     ) {
+        val sizeClass = calculateWindowSizeClass(activity = this)
+        val showOnePanel = sizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+
         // Estat del temps restant de la partida
         val remainingTime = remember { mutableLongStateOf(5L) }
 
@@ -620,7 +633,142 @@ class MainActivity : ComponentActivity() {
 
             }
         }
+    }*/
+    @RequiresApi(Build.VERSION_CODES.N)
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "UnrememberedMutableState")
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
+    @Composable
+    fun LoadGame(
+        navController: NavController,
+        memoryViewModel: MemoryViewModel,
+        gameFinished: Boolean
+    ) {
+        val sizeClass = calculateWindowSizeClass(activity = this)
+        val showOnePanel = sizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+
+        // Estat del temps restant de la partida
+        val remainingTime = remember { mutableLongStateOf(5L) }
+
+        // Indica si la partida ha finalitzat
+        val gameEnded = remember { mutableStateOf(false) }
+
+        // Iniciar el temporitzador si s'activa i la partida no ha acabat
+        if (timer && !gameEnded.value) {
+            LaunchedEffect(key1 = true) {
+                while (remainingTime.longValue > 0) {
+                    delay(1000)
+                    remainingTime.longValue -= 1
+                }
+                gameEnded.value = true
+            }
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = stringResource(id = R.string.app_name))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = playerName)
+                        }
+                    },
+                    actions = {
+                        if (timer) Text(text = "Time: ${remainingTime.longValue} sec")
+                    }
+                )
+            }
+        ) {
+            if (showOnePanel) {
+                // Si es mostra només un panell (per mòbil)
+                LoadGameSinglePanel(
+                    navController = navController,
+                    memoryViewModel = memoryViewModel,
+                    gameFinished = gameFinished,
+                    remainingTime = remainingTime,
+                    gameEnded = gameEnded
+                )
+            } else {
+                // Si es mostra un panell a l'esquerra i l'altre a la dreta (per tauleta)
+                LoadGameDualPanel(
+                    navController = navController,
+                    memoryViewModel = memoryViewModel,
+                    gameFinished = gameFinished,
+                    remainingTime = remainingTime,
+                    gameEnded = gameEnded
+                )
+            }
+        }
     }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    @Composable
+    fun LoadGameSinglePanel(
+        navController: NavController,
+        memoryViewModel: MemoryViewModel,
+        gameFinished: Boolean,
+        remainingTime: MutableLongState,
+        gameEnded: MutableState<Boolean>
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 60.dp)
+        ) {
+            // Mostrar cartes i graella
+            val cards: List<Cards> by memoryViewModel.getCards().observeAsState(listOf())
+            val cardImages: List<Painter> =
+                memoryViewModel.obtainCardImages().map { painterResource(it) }
+            CardsGrid(cards, cardImages)
+
+            // Navegar a la pantalla de final de partida si la partida ha acabat
+            if (gameEnded.value || gameFinished) {
+                navController.navigate("gameFinished")
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    @Composable
+    fun LoadGameDualPanel(
+        navController: NavController,
+        memoryViewModel: MemoryViewModel,
+        gameFinished: Boolean,
+        remainingTime: MutableLongState,
+        gameEnded: MutableState<Boolean>
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            // Graella de cartes a l'esquerra
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1f)
+                    .padding(top = 60.dp)
+            ) {
+                val cards: List<Cards> by memoryViewModel.getCards().observeAsState(listOf())
+                val cardImages: List<Painter> =
+                    memoryViewModel.obtainCardImages().map { painterResource(it) }
+                CardsGrid(cards, cardImages)
+            }
+            // Resultats a la dreta
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1f)
+                    .padding(top = 60.dp)
+            ) {
+                // Mostra els resultats aquí
+                // Això podria ser la llista de cartes coincidents, temps restant, etc.
+                // Si la partida ha acabat, podríeu navegar a la pantalla de final de partida aquí
+                if (gameEnded.value || gameFinished) {
+                    navController.navigate("gameFinished")
+                }
+            }
+        }
+    }
+
 
 
     /**
@@ -643,7 +791,7 @@ class MainActivity : ComponentActivity() {
         // Graella LazyVerticalGrid per mostrar les cartes
         LazyVerticalGrid(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            //contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             columns = GridCells.Fixed(columns)
         ) {
             items(cards.size) { cardIndex ->

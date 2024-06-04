@@ -172,9 +172,6 @@ class MemoryViewModel : ViewModel() {
             }
             selectedCards.forEach { it.isSelected = false }
         }
-
-        //println("Final" + selectedCards?.size)
-
         cartes.value?.removeAll { true }
         cartes.value = list
         gameFinished.value = allCardsMatched()
