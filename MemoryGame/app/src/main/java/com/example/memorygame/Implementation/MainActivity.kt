@@ -10,8 +10,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.TweenSpec
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,13 +44,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +61,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
@@ -86,17 +98,19 @@ import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import androidx.compose.runtime.*
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color.Companion.Red
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.lifecycleScope
 import com.example.memorygame.DataBase.AppDatabase
 import com.example.memorygame.DataBase.Partida
+import com.example.memorygame.DataBase.PartidaDao
 import com.example.memorygame.R
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
+import kotlin.math.sin
+import kotlin.properties.Delegates
 
 /**
  * Activitat principal que gestiona el joc de Memory.
@@ -109,7 +123,7 @@ import kotlinx.coroutines.withContext
  * @constructor Crea una nova instància de la classe MainActivity.
  */
 class MainActivity : ComponentActivity() {
-
+    var saved: Boolean = false
     var timer: Boolean = false
 
     /**
@@ -132,17 +146,23 @@ class MainActivity : ComponentActivity() {
      */
     private var musicActive = false
 
+    lateinit var sizeClass: WindowSizeClass
+    var showOnePanel by Delegates.notNull<Boolean>()
+
     /**
      * Mètode que s'executa en crear l'activitat.
      * Configura el contingut de l'activitat, que inclou la navegació entre les diferents pantalles del joc.
      * @param savedInstanceState Estat anterior de l'activitat, si n'hi ha.
      */
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
             MemoryGameTheme {
+                sizeClass = calculateWindowSizeClass(activity = this)
+                showOnePanel = sizeClass.widthSizeClass == WindowWidthSizeClass.Compact
                 val gameFinished by memoryViewModel.gameFinished.observeAsState(false)
                 val navController = rememberNavController()
 
@@ -154,6 +174,7 @@ class MainActivity : ComponentActivity() {
                             navigateToInfo = { navController.navigate("info") },
                             navigateToExit = { navController.navigate("exit") },
                             navigateToGame = { navController.navigate("loadGame/") },
+                            navigateToSavedGames = { navController.navigate("savedGames") }
                         )
                     }
                     // Modifica (Botó)
@@ -179,8 +200,6 @@ class MainActivity : ComponentActivity() {
                             stopService(Intent(this@MainActivity, MusicService::class.java))
                         }
                         GameFinishedScreen(
-                            cardsMatched = memoryViewModel.getCardsMatchedCount(),
-                            cardsNotMatched = memoryViewModel.getCardsNotMatchedCount(),
                             navigateToGame = { navController.popBackStack("loadGame/", false) },
                             navigateToExit = { finish() },
                             navigateToConfig = {
@@ -194,9 +213,17 @@ class MainActivity : ComponentActivity() {
 
                     // Saved Games
                     composable("savedGames") {
-                        SavedGamesScreen(
-                            navigateBack = { navController.popBackStack() }
-                        )
+                        // Smartphone
+                        if (showOnePanel) {
+                            SavedGamesScreenPhone(
+                                navigateBack = { navController.popBackStack() }
+                            )
+                        } else {
+                            SavedGamesScreenTablet(
+                                navigateBack = { navController.popBackStack() }
+                            )
+                        }
+
                     }
 
                     // Pantalla d'información
@@ -257,35 +284,20 @@ class MainActivity : ComponentActivity() {
         navigateToConfig: () -> Unit,
         navigateToInfo: () -> Unit,
         navigateToExit: () -> Unit,
-        navigateToGame: () -> Unit
+        navigateToGame: () -> Unit,
+        navigateToSavedGames: () -> Unit
     ) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    colors = TopAppBarDefaults.smallTopAppBarColors(
-                        BlueLight
-                    ),
-                    title = {
-                        Box(modifier = Modifier.fillMaxWidth())
-                    },
+                    colors = TopAppBarDefaults.smallTopAppBarColors(BlueLight),
+                    title = { Box(modifier = Modifier.fillMaxWidth()) },
                     actions = {
-                        Button(
+                        IconButton(
                             onClick = { navigateToConfig() },
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
+                            modifier = Modifier.padding(end = 16.dp) // Afegir padding
                         ) {
-                            val logo: Painter =
-                                painterResource(id = R.drawable.settings_logo) // Cambia logo al nombre de tu imagen
-                            Icon(
-                                painter = logo,
-                                contentDescription = "Logo",
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(45.dp)
-                            )
+                            Icon(Icons.Default.Settings, contentDescription = "Configuració")
                         }
                     }
                 )
@@ -300,54 +312,130 @@ class MainActivity : ComponentActivity() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
-
-                    ) {
+                        .padding(16.dp), // Afegir padding
+                ) {
                     Text(
                         text = "Memory Game",
                         style = TextStyle(
                             fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = BlueGreenDark // Color del text
                         )
                     )
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Botó per començar el joc: Start Game -> Configuració -> LoadGame
-                    Button(
+                    // Botons
+                    val buttonModifier = Modifier
+                        .width(200.dp)
+                        .height(60.dp) // Mida uniforme per a tots els botons
+                        .padding(vertical = 8.dp) // Espai vertical entre botons
+
+                    // Animació per al botó d'iniciar partida
+                    val shakeDuration = 1000
+                    val infiniteTransition = rememberInfiniteTransition()
+                    val shakeAnimation by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 10f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(
+                                durationMillis = shakeDuration,
+                                easing = LinearEasing
+                            ),
+                            repeatMode = RepeatMode.Reverse
+                        ), label = ""
+                    )
+
+                    OutlinedButton(
                         onClick = { navigateToGame() },
-                        modifier = Modifier.width(150.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
-                        elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                        modifier = buttonModifier.then(Modifier.offset(x = shakeAnimation.dp)),
+                        shape = RoundedCornerShape(12.dp), // Forma arrodonida
+                        border = BorderStroke(2.dp, BlueGreenDark), // Vora personalitzada
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            BlueGreenDark, // Color de fons personalitzat
+                            contentColor = BlueLight // Color del text
+                        ),
+                        elevation = ButtonDefaults.elevatedButtonElevation( // Efecte d'elevació
+                            defaultElevation = 0.dp, // Sense elevació
+                            pressedElevation = 4.dp // Elevació en prémer
+                        )
                     ) {
-                        Text(text = "Start Game")
+                        Text(
+                            text = "Iniciar partida",
+                            fontSize = 18.sp, // Mida de la font
+                            color = BlueLight // Color del text
+                        )
                     }
 
                     // Botó per accedir a la pantalla d'informació
-                    Spacer(modifier = Modifier.height(16.dp)) // Espai entre els botons
-                    Button(
-                        onClick = { navigateToInfo() }, modifier = Modifier.width(150.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
-                        elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                    OutlinedButton(
+                        onClick = { navigateToInfo() },
+                        modifier = buttonModifier,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(2.dp, BlueGreenDark),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            BlueGreenDark,
+                            contentColor = BlueLight
+                        ),
+                        elevation = ButtonDefaults.elevatedButtonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
                     ) {
-                        Text(text = "Informació")
+                        Text(
+                            text = "Informació",
+                            fontSize = 18.sp,
+                            color = BlueLight
+                        )
+                    }
+
+                    // Botó per veure el registre de partides guardades
+                    OutlinedButton(
+                        onClick = { navigateToSavedGames() },
+                        modifier = buttonModifier,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(2.dp, BlueGreenDark),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            BlueGreenDark,
+                            contentColor = BlueLight
+                        ),
+                        elevation = ButtonDefaults.elevatedButtonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Text(
+                            text = "Veure partides",
+                            fontSize = 18.sp,
+                            color = BlueLight
+                        )
                     }
 
                     // Botó per sortir del joc
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { navigateToExit() }, modifier = Modifier.width(150.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(BlueGreen, contentColor = Color.White),
-                        elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                    OutlinedButton(
+                        onClick = { navigateToExit() },
+                        modifier = buttonModifier,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(2.dp, BlueGreenDark),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            BlueGreenDark,
+                            contentColor = BlueLight
+                        ),
+                        elevation = ButtonDefaults.elevatedButtonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
                     ) {
-                        Text(text = "Sortir del joc")
+                        Text(
+                            text = "Sortir del joc",
+                            fontSize = 18.sp,
+                            color = BlueLight
+                        )
                     }
                 }
             }
         }
     }
+
 
     /**
      * Funció Composable que mostra la pantalla d'informació del joc de Memory.
@@ -648,7 +736,7 @@ class MainActivity : ComponentActivity() {
         }
     }*/
 
-    @RequiresApi(Build.VERSION_CODES.N)
+    @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "UnrememberedMutableState")
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     @Composable
@@ -717,7 +805,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.N)
+    @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun LoadGameSinglePanel(
         navController: NavController,
@@ -739,12 +827,17 @@ class MainActivity : ComponentActivity() {
 
             // Navegar a la pantalla de final de partida si la partida ha acabat
             if (gameEnded.value || gameFinished) {
+                // Guardar partida a la base de dades
+                if (!saved) {
+                    SaveGameToDb()
+                    saved = true
+                }
                 navController.navigate("gameFinished")
             }
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.N)
+    @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun LoadGameDualPanel(
         navController: NavController,
@@ -773,12 +866,50 @@ class MainActivity : ComponentActivity() {
                     .weight(1f)
                     .padding(top = 60.dp)
             ) {
-                // Mostra els resultats aquí
-                // Això podria ser la llista de cartes coincidents, temps restant, etc.
-                // Si la partida ha acabat, podríeu navegar a la pantalla de final de partida aquí
+
                 if (gameEnded.value || gameFinished) {
+                    // Guardar partida a la base de dades
+                    if (!saved) {
+                        SaveGameToDb()
+                        saved = true
+                    }
                     navController.navigate("gameFinished")
                 }
+            }
+        }
+    }
+
+
+    @SuppressLint("CoroutineCreationDuringComposition")
+    @RequiresApi(Build.VERSION_CODES.O)
+    @Composable
+    private fun SaveGameToDb(): Unit {
+        val currentDateTime by remember { mutableStateOf(LocalDateTime.now()) }
+        val context = LocalContext.current
+        val cardsMatched = memoryViewModel.getCardsMatchedCount()
+        val cardsNotMatched = memoryViewModel.getCardsNotMatchedCount()
+        // Obtén una instancia de la base de datos y del DAO
+        val db = AppDatabase.getDatabase(context)
+        val partidaDao = db.partidaDao()
+
+        // Crear una nova partida amb les dades de la partida actual
+        val partida = Partida(
+            nomJugador = playerName,
+            dataHora = currentDateTime.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")),
+            temporitzador = timer, // Cambia este valor según tu lógica de juego
+            dificultat = globalDifficulty, // Cambia este valor según tu lógica de juego
+            numeroCartes = cardsMatched + cardsNotMatched,
+            cartesEncertades = cardsMatched,
+            cartesNoEncertades = cardsNotMatched
+        )
+
+        // Utilizar una coroutine para realizar la verificación e inserción
+        lifecycleScope.launch {
+            // Verificar si la partida ya está en la base de datos
+            val existingPartida = partidaDao.getPartidaById(partida.id)
+            if (existingPartida == null) {
+                // La partida no existe, así que la insertamos
+                partidaDao.insertIfNotExists(partida)
             }
         }
     }
@@ -1108,8 +1239,6 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun GameFinishedScreen(
-        cardsMatched: Int,
-        cardsNotMatched: Int,
         navigateToGame: () -> Unit,
         navigateToExit: () -> Unit,
         navigateToConfig: () -> Unit,
@@ -1119,34 +1248,6 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         var email by remember { mutableStateOf("") }
         val isEmailValid: Boolean = email.isNotBlank()
-        val coroutineScope = rememberCoroutineScope()
-
-        // Obtén una instancia de la base de datos y del DAO
-        val db = AppDatabase.getDatabase(context)
-        val partidaDao = db.partidaDao()
-
-        // Crear una nova partida amb les dades de la partida actual
-        val partida = Partida(
-            id = 0, // Auto-generate ID
-            nomJugador = playerName,
-            dataHora = currentDateTime.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")),
-            temporitzador = timer, // Cambia este valor según tu lógica de juego
-            dificultat = globalDifficulty, // Cambia este valor según tu lógica de juego
-            numeroCartes = cardsMatched + cardsNotMatched,
-            cartesEncertades = cardsMatched,
-            cartesNoEncertades = cardsNotMatched
-        )
-
-        // Utilizar una coroutine para realizar la verificación e inserción
-        lifecycleScope.launch {
-            // Verificar si la partida ya está en la base de datos
-            val existingPartida = partidaDao.getPartidaById(partida.id)
-            if (existingPartida == null) {
-                // La partida no existe, así que la insertamos
-                partidaDao.insertIfNotExists(partida)
-            }
-        }
-
 
         Scaffold(
             topBar = {
@@ -1202,6 +1303,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Spacer(modifier = Modifier.height(16.dp))
 
+
                         // Mostrar valors del registre de la partida
                         Text(
                             text = "Valors del registre de la partida:",
@@ -1213,15 +1315,25 @@ class MainActivity : ComponentActivity() {
                                 withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
                                     append("Nom del jugador: ")
                                 }
-                                append("$playerName, ")
+                                append("$playerName")
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = buildAnnotatedString {
                                 withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
                                     append("Cartes encertades: ")
                                 }
-                                append("$cardsMatched, ")
+                                append("${memoryViewModel.getCardsMatchedCount()}")
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = buildAnnotatedString {
                                 withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
                                     append("Cartes no encertades: ")
                                 }
-                                append("$cardsNotMatched")
+                                append("${memoryViewModel.getCardsNotMatchedCount()}")
                             }
                         )
                         Spacer(modifier = Modifier.height(16.dp))
@@ -1250,8 +1362,8 @@ class MainActivity : ComponentActivity() {
                                 val emailContent = buildString {
                                     append("Data i hora: $currentDateTime\n")
                                     append("Nom jugador: $playerName\n")
-                                    append("Cartes encertades: $cardsMatched\n")
-                                    append("Cartes no encertades: $cardsNotMatched\n")
+                                    append("Cartes encertades: ${memoryViewModel.getCardsMatchedCount()}\n")
+                                    append("Cartes no encertades: ${memoryViewModel.getCardsNotMatchedCount()}\n")
                                 }
                                 sendEmail(context, emailContent, email)
                             },
@@ -1274,6 +1386,7 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 memoryViewModel.restartGame()
                                 musicActive = false
+                                saved = false
                                 navigateToGame()
                             },
                             modifier = Modifier.width(150.dp),
@@ -1290,7 +1403,7 @@ class MainActivity : ComponentActivity() {
 
                         // Veure partides guardades
                         Button(
-                            onClick = navigateToSavedGames,
+                            onClick = { navigateToSavedGames() },
                             modifier = Modifier.width(150.dp),
                             shape = RoundedCornerShape(50),
                             colors = ButtonDefaults.buttonColors(
@@ -1322,23 +1435,152 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-
-    // Aquesta és la teva funció savedGames que obté les partides guardades de la base de dades
-    suspend fun savedGames(): List<Partida> {
-        // Aquí es crida a la funció que obté les partides guardades de la base de dades
-        return AppDatabase.getDatabase(this).partidaDao().getPartides().value ?: listOf()
-    }
-
     @OptIn(ExperimentalMaterial3Api::class)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @Composable
-    fun SavedGamesScreen(
+    fun SavedGamesScreenPhone(
         navigateBack: () -> Unit
     ) {
         val context = LocalContext.current
         val db = AppDatabase.getDatabase(context)
         val partidaDao = db.partidaDao()
         val savedGames by partidaDao.getPartides().observeAsState(initial = emptyList())
+        val coroutineScope = rememberCoroutineScope()
+        var selectedPartida by remember { mutableStateOf<Partida?>(null) }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Partides Guardades") },
+                    navigationIcon = {
+                        IconButton(onClick = navigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        // Botón de eliminación en la parte superior derecha
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    // Eliminar totes les partidas
+                                    partidaDao.deleteAll()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar totes les partides")
+                        }
+                    },
+                    colors = TopAppBarDefaults.smallTopAppBarColors(
+                        containerColor = BlueLight // Color de fondo del TopAppBar
+                    )
+                )
+            },
+            content = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(BlueLight) // Color de fondo para toda la pantalla
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Partides Guardades",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White, // Color del texto
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    // Mostrar las partidas guardadas
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(savedGames) { partida ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                                    .background(BlueGreenLight, shape = RoundedCornerShape(8.dp))
+                                    .padding(8.dp)
+                                    .clickable { selectedPartida = partida }
+                            ) {
+                                Text(text = "Nom del jugador: ${partida.nomJugador}")
+                                Text(text = "Data i hora: ${partida.dataHora}")
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Mostrar popup con los detalles de la partida seleccionada
+                    selectedPartida?.let { partida ->
+                        AlertDialog(
+                            onDismissRequest = { selectedPartida = null },
+                            title = { Text("Detalls de la Partida") },
+                            text = {
+                                Column {
+                                    Text(text = "Nom del jugador: ${partida.nomJugador}")
+                                    Text(text = "Data i hora: ${partida.dataHora}")
+                                    Text(text = "Temporitzador: ${if (partida.temporitzador) "Activat" else "Desactivat"}")
+                                    Text(text = "Dificultat: ${partida.dificultat}")
+                                    Text(text = "Número de cartes: ${partida.numeroCartes ?: "N/A"}")
+                                    Text(text = "Cartes encertades: ${partida.cartesEncertades}")
+                                    Text(text = "Cartes no encertades: ${partida.cartesNoEncertades}")
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = { selectedPartida = null },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = BlueGreen, // Color del botón de confirmación BlueGreen
+                                        contentColor = Color.White
+                                    ),
+                                ) {
+                                    Text("Tancar")
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun SavedGamesScreenTablet(
+        navigateBack: () -> Unit
+    ) {
+        val context = LocalContext.current
+        val db = AppDatabase.getDatabase(context)
+        val partidaDao = db.partidaDao()
+        val savedGames by partidaDao.getPartides().observeAsState(initial = emptyList())
+
+        val configuration = context.resources.configuration
+        val isLandscape =
+            configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+        if (isLandscape) {
+            HistorialLandscape(savedGames, navigateBack, partidaDao)
+        } else {
+            HistorialPortrait(savedGames, navigateBack, partidaDao)
+        }
+    }
+
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun HistorialLandscape(
+        savedGames: List<Partida>,
+        navigateBack: () -> Unit,
+        partidaDao: PartidaDao // Asegúrate de pasar el DAO como argumento
+    ) {
+        val selectedPartida = remember { mutableStateOf<Partida?>(null) }
         val coroutineScope = rememberCoroutineScope()
 
         Scaffold(
@@ -1350,62 +1592,211 @@ class MainActivity : ComponentActivity() {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     },
+                    colors = TopAppBarDefaults.smallTopAppBarColors(
+                        containerColor = BlueLight // Color de fons del TopAppBar
+                    ),
+                    actions = {
+                        // Botón de eliminación en la parte superior derecha
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    // Eliminar todas las partidas
+                                    partidaDao.deleteAll()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Eliminar totes les partides"
+                            )
+                        }
+                    }
+                )
+            },
+            content = {
+                Row(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Panel esquerre: llista de partides
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .background(BlueLight)
+                    ) {
+                        Text(
+                            text = "Partides Guardades",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 16.dp).background(BlueLight)
+                        )
+
+                        LazyColumn(
+                            modifier = Modifier.fillMaxHeight().background(BlueLight)
+
+                        ) {
+                            items(savedGames) { partida ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp)
+                                        .background(
+                                            BlueGreenLight,
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(8.dp)
+                                        .clickable { selectedPartida.value = partida }
+                                ) {
+                                    Text(text = "Nom del jugador: ${partida.nomJugador}")
+                                    Text(text = "Data i hora: ${partida.dataHora}")
+                                }
+                            }
+                        }
+                    }
+
+                    // Panel dret: detalls de la partida seleccionada
+                    Box(
+                        modifier = Modifier
+                            .weight(2f)
+                            .fillMaxHeight()
+                            .background(BlueLight)
+                    ) {
+                        selectedPartida.value?.let { partida ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "Detalls de la Partida",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(bottom = 16.dp)
+                                )
+                                Text(text = "Nom del jugador: ${partida.nomJugador}")
+                                Text(text = "Data i hora: ${partida.dataHora}")
+                                Text(text = "Temporitzador: ${if (partida.temporitzador) "Activat" else "Desactivat"}")
+                                Text(text = "Dificultat: ${partida.dificultat}")
+                                Text(text = "Número de cartes: ${partida.numeroCartes ?: "N/A"}")
+                                Text(text = "Cartes encertades: ${partida.cartesEncertades}")
+                                Text(text = "Cartes no encertades: ${partida.cartesNoEncertades}")
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun HistorialPortrait(
+        savedGames: List<Partida>,
+        navigateBack: () -> Unit,
+        partidaDao: PartidaDao
+    ) {
+        val selectedPartida = remember { mutableStateOf<Partida?>(null) }
+        val coroutineScope = rememberCoroutineScope()
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Partides Guardades") },
+                    navigationIcon = {
+                        IconButton(onClick = navigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.smallTopAppBarColors(
+                        containerColor = BlueLight // Color de fons del TopAppBar
+                    ),
+                    actions = {
+                        // Botón de eliminación en la parte superior derecha
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    // Eliminar todas las partidas
+                                    partidaDao.deleteAll()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Eliminar totes les partides"
+                            )
+                        }
+                    }
                 )
             },
             content = {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.Top,
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .background(BlueLight),
+                    verticalArrangement = Arrangement.Center // Centrar verticalmente
                 ) {
                     Text(
                         text = "Partides Guardades",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        modifier = Modifier.padding(16.dp)
                     )
 
-                    // Mostrar les partides guardades
+                    // Panel superior: llista de partides
                     LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.weight(1f)
                     ) {
                         items(savedGames) { partida ->
-                            Text(text = "Partida ${partida.id}: ${partida.nomJugador}, ${partida.dificultat},  ${partida.dataHora}")
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                                    .background(BlueGreenLight, shape = RoundedCornerShape(8.dp))
+                                    .padding(8.dp)
+                                    .clickable { selectedPartida.value = partida }
+                            ) {
+                                Text(text = "Nom del jugador: ${partida.nomJugador}")
+                                Text(text = "Data i hora: ${partida.dataHora}")
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Botó per esborrar totes les partides guardades
-                    Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                partidaDao.deleteAll()
+                    // Panel inferior: detalls de la partida seleccionada
+                    selectedPartida.value?.let { partida ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(BlueLight)
+                                .padding(16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.align(Alignment.Center)
+                            ) {
+                                Text(
+                                    text = "Detalls de la Partida",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(bottom = 16.dp)
+                                )
+                                Text(text = "Nom del jugador: ${partida.nomJugador}")
+                                Text(text = "Data i hora: ${partida.dataHora}")
+                                Text(text = "Temporitzador: ${if (partida.temporitzador) "Activat" else "Desactivat"}")
+                                Text(text = "Dificultat: ${partida.dificultat}")
+                                Text(text = "Número de cartes: ${partida.numeroCartes ?: "N/A"}")
+                                Text(text = "Cartes encertades: ${partida.cartesEncertades}")
+                                Text(text = "Cartes no encertades: ${partida.cartesNoEncertades}")
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Esborrar totes les partides")
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
 
-                    // Botó per tornar enrere
-                    Button(
-                        onClick = navigateBack,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Tornar Enrere")
-                    }
                 }
             }
         )
     }
+
+
 
     /**
      * Envia un correu electrònic amb els detalls de la partida.
