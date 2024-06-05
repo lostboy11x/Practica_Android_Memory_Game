@@ -3,6 +3,7 @@ package com.example.memorygame.Implementation
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -53,6 +54,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -103,6 +105,9 @@ import androidx.compose.ui.graphics.Color.Companion.Red
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.lifecycleScope
 import com.example.memorygame.DataBase.AppDatabase
 import com.example.memorygame.DataBase.Partida
@@ -268,6 +273,19 @@ class MainActivity : ComponentActivity() {
         stopService(Intent(this@MainActivity, MusicService::class.java))
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        memoryViewModel.gameFinished.value?.let { outState.putBoolean("gameFinished", it) }
+        // Altres dades importants del joc
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        val gameFinished = savedInstanceState.getBoolean("gameFinished")
+        // Restaura altres dades del joc segons sigui necessari
+    }
+
+
     /**
      * Funció Composable que mostra la primera pantalla de l'aplicació, que inclou els botons per començar la partida,
      * accedir a la pantalla d'informació o sortir del joc.
@@ -295,7 +313,7 @@ class MainActivity : ComponentActivity() {
                     actions = {
                         IconButton(
                             onClick = { navigateToConfig() },
-                            modifier = Modifier.padding(end = 16.dp) // Afegir padding
+                            modifier = Modifier.padding(end = 16.dp)
                         ) {
                             Icon(Icons.Default.Settings, contentDescription = "Configuració")
                         }
@@ -404,7 +422,7 @@ class MainActivity : ComponentActivity() {
                         )
                     ) {
                         Text(
-                            text = "Veure partides",
+                            text = "Historial",
                             fontSize = 18.sp,
                             color = BlueLight
                         )
@@ -785,20 +803,17 @@ class MainActivity : ComponentActivity() {
         ) {
             if (showOnePanel) {
                 // Si es mostra només un panell (per mòbil)
-                LoadGameSinglePanel(
+                LoadGamePhone(
                     navController = navController,
                     memoryViewModel = memoryViewModel,
                     gameFinished = gameFinished,
-                    remainingTime = remainingTime,
                     gameEnded = gameEnded
                 )
             } else {
                 // Si es mostra un panell a l'esquerra i l'altre a la dreta (per tauleta)
-                LoadGameDualPanel(
+                LoadGameTablet(
                     navController = navController,
-                    memoryViewModel = memoryViewModel,
                     gameFinished = gameFinished,
-                    remainingTime = remainingTime,
                     gameEnded = gameEnded
                 )
             }
@@ -807,11 +822,10 @@ class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
-    fun LoadGameSinglePanel(
+    fun LoadGamePhone(
         navController: NavController,
         memoryViewModel: MemoryViewModel,
         gameFinished: Boolean,
-        remainingTime: MutableLongState,
         gameEnded: MutableState<Boolean>
     ) {
         Column(
@@ -839,13 +853,30 @@ class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
-    fun LoadGameDualPanel(
+    fun LoadGameTablet(
         navController: NavController,
-        memoryViewModel: MemoryViewModel,
         gameFinished: Boolean,
-        remainingTime: MutableLongState,
         gameEnded: MutableState<Boolean>
     ) {
+        val configuration = LocalConfiguration.current
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        if (isLandscape) {
+            LoadGameTabletLandscape(navController, gameFinished, gameEnded)
+        } else {
+            LoadGameTabletPortrait(navController, gameFinished, gameEnded)
+        }
+
+    }
+    @RequiresApi(Build.VERSION_CODES.O)
+    @Composable
+    fun LoadGameTabletLandscape(
+        navController: NavController,
+        gameFinished: Boolean,
+        gameEnded: MutableState<Boolean>
+    ) {
+        var saved by remember { mutableStateOf(false) }
+
         Row(modifier = Modifier.fillMaxSize()) {
             // Graella de cartes a l'esquerra
             Column(
@@ -860,21 +891,81 @@ class MainActivity : ComponentActivity() {
                 CardsGrid(cards, cardImages)
             }
             // Resultats a la dreta
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxHeight()
                     .weight(1f)
                     .padding(top = 60.dp)
             ) {
-
-                if (gameEnded.value || gameFinished) {
-                    // Guardar partida a la base de dades
-                    if (!saved) {
-                        SaveGameToDb()
-                        saved = true
-                    }
-                    navController.navigate("gameFinished")
+                item {
+                    Text("Logs de la Partida", style = MaterialTheme.typography.headlineSmall)
                 }
+
+                // Aquí pots iterar sobre els logs de la partida
+                val logs: List<String> = memoryViewModel.gameLogs
+                items(logs.size) { index ->
+                    Text(text = logs[index])
+                }
+            }
+
+            if (gameEnded.value || gameFinished) {
+                // Guardar partida a la base de dades
+                if (!saved) {
+                    SaveGameToDb()
+                    saved = true
+                }
+                navController.navigate("gameFinished")
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    @Composable
+    fun LoadGameTabletPortrait(
+        navController: NavController,
+        gameFinished: Boolean,
+        gameEnded: MutableState<Boolean>
+    ) {
+        var saved by remember { mutableStateOf(false) }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Graella de cartes a dalt
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(top = 60.dp)
+            ) {
+                val cards: List<Cards> by memoryViewModel.getCards().observeAsState(listOf())
+                val cardImages: List<Painter> =
+                    memoryViewModel.obtainCardImages().map { painterResource(it) }
+                CardsGrid(cards, cardImages)
+            }
+            // Resultats a sota
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(top = 60.dp)
+            ) {
+                item {
+                    Text("Logs de la Partida", style = MaterialTheme.typography.headlineSmall)
+                }
+
+                // Aquí pots iterar sobre els logs de la partida
+                val logs: List<String> = memoryViewModel.gameLogs
+                items(logs.size) { index ->
+                    Text(text = logs[index])
+                }
+            }
+
+            if (gameEnded.value || gameFinished) {
+                // Guardar partida a la base de dades
+                if (!saved) {
+                    SaveGameToDb()
+                    saved = true
+                }
+                navController.navigate("gameFinished")
             }
         }
     }
@@ -921,8 +1012,8 @@ class MainActivity : ComponentActivity() {
      * @param cards Llista de les cartes del joc.
      * @param cardImages Llista de les imatges de les cartes.
      */
-
-    @RequiresApi(Build.VERSION_CODES.N)
+    /*
+    @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun CardsGrid(cards: List<Cards>, cardImages: List<Painter>) {
         // Resolució del nombre de columnes de la graella basat en la dificultat global del joc
@@ -940,14 +1031,48 @@ class MainActivity : ComponentActivity() {
             columns = GridCells.Fixed(columns)
         ) {
             items(cards.size) { cardIndex ->
+                val card = cards[cardIndex]
                 CardItem(
-                    cards[cardIndex],
+                    card,
                     cardImages[cardIndex],
-                    onContinueClicked = { memoryViewModel.updateVisibleCardStates(cards[cardIndex].id) })
+                    onContinueClicked = { memoryViewModel.updateVisibleCardStates(card) }
+                )
+            }
+        }
+    }*/
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    @Composable
+    fun CardsGrid(cards: List<Cards>, cardImages: List<Painter>) {
+        // Resolució del nombre de columnes de la graella basat en la dificultat global del joc
+        val columns = when (globalDifficulty) {
+            "Fàcil" -> 3    // 3 * 3
+            "Intermedia" -> 4   // 4 * 4
+            "Difícil" -> 4  // 4 * 6
+            else -> 4
+        }
+
+        val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+
+        val cardSize = (screenWidth / columns).coerceAtMost(100.dp) // Defineix el tamany màxim de la carta a 100dp
+
+        // Graella LazyVerticalGrid per mostrar les cartes
+        LazyVerticalGrid(
+            modifier = Modifier.size(cardSize * columns * 2),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            columns = GridCells.Fixed(columns)
+        ) {
+            items(cards.size) { cardIndex ->
+                val card = cards[cardIndex]
+                CardItem(
+                    card,
+                    cardImages[cardIndex],
+                    onContinueClicked = { memoryViewModel.updateVisibleCardStates(card) },
+                    cardSize = cardSize
+                )
             }
         }
     }
-
     /**
      * Composable que representa una carta en la graella del joc.
      *
@@ -958,7 +1083,7 @@ class MainActivity : ComponentActivity() {
      * @param cardImage La imatge de la carta.
      */
     @Composable
-    fun CardItem(card: Cards, cardImage: Painter, onContinueClicked: () -> Unit) {
+    fun CardItem(card: Cards, cardImage: Painter, onContinueClicked: () -> Unit, cardSize: Dp) {
         var rotationState by remember { mutableFloatStateOf(0f) }
 
         val rotationAngle by animateFloatAsState(
@@ -972,15 +1097,13 @@ class MainActivity : ComponentActivity() {
         }
 
         Box(
-            modifier = Modifier.padding(4.dp)
+            modifier = Modifier
+                .padding(4.dp)
+                .size(cardSize)
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        color = Color.Black.copy(alpha = if (card.isVisible && !card.isSelected && !card.isMatched) 0.4F else 0.0F),
-                        shape = RoundedCornerShape(10.dp)
-                    )
+                    .size(cardSize + 10.dp)
                     .clickable {
                         if (card.isVisible && !card.isMatched && !card.isSelected) {
                             onContinueClicked()
@@ -988,20 +1111,24 @@ class MainActivity : ComponentActivity() {
                     }
                     .graphicsLayer(
                         rotationY = rotationAngle
-                    ),
+                    )
+                    .background(
+                        color = Color.Black.copy(alpha = if (card.isVisible && !card.isSelected && !card.isMatched) 0.4F else 0.0F),
+                        shape = RoundedCornerShape(10.dp)
+                    )
             ) {
                 Image(
-                    //painter = if ((rotationAngle % 360 < 90 || rotationAngle % 360 > 270) && (!card.isMatched && !card.isSelected)) painterResource(R.drawable.carta_revers) else cardImage,
                     painter = if (!card.isMatched && !card.isSelected) painterResource(R.drawable.carta_revers) else cardImage,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(4.dp)
                         .clip(RoundedCornerShape(10.dp))
                 )
             }
         }
     }
+
+
 
 
     /**
@@ -1018,222 +1145,6 @@ class MainActivity : ComponentActivity() {
      * @param navigateToConfig La funció per navegar a la pantalla de configuració del joc.
      * @param navigateToExit La funció per sortir del joc.
      */
-    /*
-    @RequiresApi(Build.VERSION_CODES.O)
-    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "CoroutineCreationDuringComposition")
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    fun GameFinishedScreen(
-        cardsMatched: Int,
-        cardsNotMatched: Int,
-        navigateToGame: () -> Unit,
-        navigateToExit: () -> Unit,
-        navigateToConfig: () -> Unit,
-        navigateToSavedGames: () -> Unit
-    ) {
-        val currentDateTime by remember { mutableStateOf(LocalDateTime.now()) }
-        val context = LocalContext.current
-        var email by remember { mutableStateOf("") }
-        val isEmailValid: Boolean = email.isNotBlank()
-
-        // Obtenir una instància de la base de dades i del DAO
-        val db = AppDatabase.getDatabase(context)
-        val partidaDao = db.partidaDao()
-
-        // Crear una nova partida amb les dades de la partida actual
-        val partida = Partida(
-            id = 0, // Auto-generate ID
-            nomJugador = playerName,
-            dataHora = currentDateTime.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")),
-            temporitzador = timer, // Canvia aquest valor segons la teva lògica de joc
-            dificultat = globalDifficulty, // Canvia aquest valor segons la teva lògica de joc
-            numeroCartes = cardsMatched + cardsNotMatched,
-            cartesEncertades = cardsMatched,
-            cartesNoEncertades = cardsNotMatched
-        )
-
-        // Guardar la partida a la base de dades
-        LaunchedEffect(Unit) {
-            withContext(Dispatchers.IO) {
-                partidaDao.insert(partida)
-            }
-        }
-
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.smallTopAppBarColors(
-                        BlueLight
-                    ),
-                    title = {
-                        Text(text = stringResource(id = R.string.pantallaFi))
-                        Box(modifier = Modifier.fillMaxWidth())
-                    },
-                    actions = {
-                        Button(
-                            onClick = { navigateToConfig() },
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
-                        ) {
-                            val logo: Painter =
-                                painterResource(id = R.drawable.settings_logo)
-                            Icon(
-                                painter = logo,
-                                contentDescription = "Logo",
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(45.dp)
-                            )
-                        }
-                    }
-                )
-            },
-            modifier = Modifier.fillMaxSize(),
-            content = {
-                Surface(
-                    color = BlueLight,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "¡Fi de la partida!",
-                            style = TextStyle(fontSize = 24.sp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        val formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")
-                        Text(
-                            text = "Data i hora: ${currentDateTime.format(formatter)}"
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Mostrar valors del registre de la partida
-                        Text(
-                            text = "Valors del registre de la partida:",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = buildAnnotatedString {
-                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
-                                    append("Nom del jugador: ")
-                                }
-                                append("$playerName, ")
-                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
-                                    append("Cartes encertades: ")
-                                }
-                                append("$cardsMatched, ")
-                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
-                                    append("Cartes no encertades: ")
-                                }
-                                append("$cardsNotMatched")
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Email
-                        Text(
-                            text = "Email del destinatari",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextField(
-                            value = email,
-                            onValueChange = { newValue -> email = newValue },
-                            label = { Text("Email") },
-                            modifier = Modifier
-                        )
-                        Text(
-                            text = "Email: $email",
-                            fontSize = 20.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = {
-                                val emailContent = buildString {
-                                    append("Data i hora: $currentDateTime\n")
-                                    append("Nom jugador: $playerName\n")
-                                    append("Cartes encertades: $cardsMatched\n")
-                                    append("Cartes no encertades: $cardsNotMatched\n")
-                                }
-                                sendEmail(context, emailContent, email)
-                            },
-                            modifier = Modifier.width(150.dp),
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
-                            enabled = isEmailValid // Només s'habilita si hi ha un email vàlid
-                        ) {
-                            Text(text = "Enviar Email")
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Tornar a jugar
-                        Button(
-                            onClick = {
-                                memoryViewModel.restartGame()
-                                musicActive = false
-                                navigateToGame()
-                            },
-                            modifier = Modifier.width(150.dp),
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
-                        ) {
-                            Text(text = "Tornar a jugar")
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Veure partides guardades
-                        Button(
-                            onClick = navigateToSavedGames,
-                            modifier = Modifier.width(150.dp),
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
-                        ) {
-                            Text(text = "Veure partides guardades")
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Finalitzar l'aplicació
-                        Button(
-                            onClick = navigateToExit,
-                            modifier = Modifier.width(150.dp),
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
-                        ) {
-                            Text(text = "Sortir del joc")
-                        }
-                    }
-                }
-            }
-        )
-    }*/
-
-    // Revisar:
     @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter", "CoroutineCreationDuringComposition")
     @OptIn(ExperimentalMaterial3Api::class)
@@ -1260,23 +1171,11 @@ class MainActivity : ComponentActivity() {
                         Box(modifier = Modifier.fillMaxWidth())
                     },
                     actions = {
-                        Button(
+                        IconButton(
                             onClick = { navigateToConfig() },
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                BlueGreen,
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp),
+                            modifier = Modifier.padding(end = 16.dp)
                         ) {
-                            val logo: Painter =
-                                painterResource(id = R.drawable.settings_logo)
-                            Icon(
-                                painter = logo,
-                                contentDescription = "Logo",
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(45.dp)
-                            )
+                            Icon(Icons.Default.Settings, contentDescription = "Configuració")
                         }
                     }
                 )
@@ -1412,7 +1311,7 @@ class MainActivity : ComponentActivity() {
                             ),
                             elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
                         ) {
-                            Text(text = "Veure partides guardades")
+                            Text(text = "Historial")
                         }
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -1467,7 +1366,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Eliminar totes les partides")
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Eliminar totes les partides"
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.smallTopAppBarColors(
@@ -1628,11 +1530,15 @@ class MainActivity : ComponentActivity() {
                             text = "Partides Guardades",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 16.dp).background(BlueLight)
+                            modifier = Modifier
+                                .padding(bottom = 16.dp)
+                                .background(BlueLight)
                         )
 
                         LazyColumn(
-                            modifier = Modifier.fillMaxHeight().background(BlueLight)
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .background(BlueLight)
 
                         ) {
                             items(savedGames) { partida ->
@@ -1795,7 +1701,6 @@ class MainActivity : ComponentActivity() {
             }
         )
     }
-
 
 
     /**

@@ -3,6 +3,7 @@ package com.example.memorygame.Implementation
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.mutableStateListOf
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -13,6 +14,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 
 /**
@@ -42,9 +45,9 @@ class MemoryViewModel : ViewModel() {
         difficulty = gameDifficulty
     }
 
-    fun getDifficulty(): String {
-        return difficulty;
-    }
+    /** Llista de logs del joc */
+    private val _gameLogs = mutableStateListOf<String>()
+    val gameLogs: List<String> get() = _gameLogs
 
     /**
      * Obté les imatges de les cartes.
@@ -154,29 +157,27 @@ class MemoryViewModel : ViewModel() {
      * @param id Identificador de la carta seleccionada.
      */
 
-    fun updateVisibleCardStates(id: String) {
-        val list: MutableList<Cards>? = cartes.value?.map { card ->
-            if (card.id == id) {
-                card.isSelected = true
-            }
 
-            card
-        } as MutableList<Cards>?
-        val selectedCards: List<Cards>? = list?.filter { it.isSelected }
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun updateVisibleCardStates(card: Cards) {
+        val list = cartes.value?.map { it.copy() }?.toMutableList() ?: return
+        val clickedCard = list.find { it.id == card.id } ?: return
 
-        if (selectedCards != null && selectedCards.size == 2) {
-            val areMatching =
-                selectedCards[0].imageResourceId == selectedCards[1].imageResourceId
+        addLog(clickedCard) // Afegir el log aquí
+
+        clickedCard.isSelected = true
+        val selectedCards = list.filter { it.isSelected }
+
+        if (selectedCards.size == 2) {
+            val areMatching = selectedCards[0].imageResourceId == selectedCards[1].imageResourceId
             if (areMatching) {
                 selectedCards.forEach { it.isMatched = true }
             }
             selectedCards.forEach { it.isSelected = false }
         }
-        cartes.value?.removeAll { true }
+
         cartes.value = list
         gameFinished.value = allCardsMatched()
-
-
     }
 
 
@@ -215,7 +216,48 @@ class MemoryViewModel : ViewModel() {
         llistaCartes.clear()
         cartes.value?.clear()
         cardImages.clear()
-        //difficulty = ""
+        _gameLogs.clear()
         playerName = ""
     }
+
+    /**
+     * Afegeix un log a la llista de logs del joc.
+     * @param card La carta clicada.
+     */
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun addLog(card: Cards, remainingTime: Long? = null) {
+        val currentTime = LocalDateTime.now()
+        val logMessage = if (remainingTime != null) {
+            "Carta clicada ${card.id} a les ${currentTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))} amb $remainingTime segons restants."
+        } else {
+            " Carta clicada ${card.id} a les ${currentTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))}."
+        }
+        _gameLogs.add(logMessage)
+    }
+
 }
+
+
+/*
+   fun updateVisibleCardStates(id: String) {
+       val list: MutableList<Cards>? = cartes.value?.map { card ->
+           if (card.id == id) {
+               card.isSelected = true
+           }
+
+           card
+       } as MutableList<Cards>?
+       val selectedCards: List<Cards>? = list?.filter { it.isSelected }
+
+       if (selectedCards != null && selectedCards.size == 2) {
+           val areMatching =
+               selectedCards[0].imageResourceId == selectedCards[1].imageResourceId
+           if (areMatching) {
+               selectedCards.forEach { it.isMatched = true }
+           }
+           selectedCards.forEach { it.isSelected = false }
+       }
+       cartes.value?.removeAll { true }
+       cartes.value = list
+       gameFinished.value = allCardsMatched()
+   }*/
