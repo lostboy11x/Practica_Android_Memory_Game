@@ -170,7 +170,6 @@ class MainActivity : ComponentActivity() {
      */
     var showOnePanel by Delegates.notNull<Boolean>()
 
-
     /**
      * Mètode que s'executa en crear l'activitat.
      * Configura el contingut de l'activitat, que inclou la navegació entre les diferents pantalles del joc.
@@ -244,7 +243,6 @@ class MainActivity : ComponentActivity() {
                                 navigateBack = { navController.popBackStack() }
                             )
                         }
-
                     }
 
                     // Pantalla d'información
@@ -738,7 +736,7 @@ class MainActivity : ComponentActivity() {
         val contentColor = if (isSelected) Color.White else Color.Black
 
         val halfScreenWidth =
-            with(LocalDensity.current) { (LocalConfiguration.current.screenWidthDp.dp / 6) }
+            with(LocalDensity.current) { (LocalConfiguration.current.screenWidthDp.dp / 3) }
 
         val halfSizeModifier = Modifier.width(halfScreenWidth)
 
@@ -776,7 +774,7 @@ class MainActivity : ComponentActivity() {
         val showOnePanel = sizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
         // Estat del temps restant de la partida
-        val remainingTime = remember { mutableLongStateOf(5L) }
+        val remainingTime = remember { mutableLongStateOf(60L) }
 
         // Indica si la partida ha finalitzat
         val gameEnded = remember { mutableStateOf(false) }
@@ -829,6 +827,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Composable que mostra la pantalla de carregament del joc.
+     *
+     * Aquesta pantalla mostra les cartes i la graella del joc en curs. També gestiona la transició a la pantalla de final de partida
+     * quan la partida ha acabat.
+     *
+     * @param navController Controlador de navegació per a la navegació entre pantalles.
+     * @param memoryViewModel ViewModel que conté la lògica del joc de memòria.
+     * @param gameFinished Indica si la partida ha acabat per causes naturals del joc.
+     * @param gameEnded Estat mutable que indica si la partida ha acabat.
+     */
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun LoadGamePhone(
@@ -840,6 +849,7 @@ class MainActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(color = BlueLight)
                 .padding(top = 60.dp)
         ) {
             // Mostrar cartes i graella
@@ -859,6 +869,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Composable que mostra la pantalla de carregament del joc en una tauleta.
+     *
+     * Aquesta pantalla s'adapta a la disposició de la tauleta i mostra el contingut del joc, gestionant
+     * la transició a la pantalla de final de partida quan la partida ha acabat.
+     *
+     * @param navController Controlador de navegació per a la navegació entre pantalles.
+     * @param gameFinished Indica si la partida ha acabat per causes naturals del joc.
+     * @param gameEnded Estat mutable que indica si la partida ha acabat.
+     */
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun LoadGameTablet(
@@ -877,6 +897,17 @@ class MainActivity : ComponentActivity() {
 
     }
 
+    /**
+     * Composable que mostra la pantalla de carregament del joc en mode paisatge en una tauleta.
+     *
+     * Aquesta pantalla està dissenyada per a dispositius en mode paisatge i mostra la graella de cartes a l'esquerra
+     * i els resultats de la partida a la dreta. També gestiona la transició a la pantalla de final de partida
+     * quan la partida ha acabat.
+     *
+     * @param navController Controlador de navegació per a la navegació entre pantalles.
+     * @param gameFinished Indica si la partida ha acabat per causes naturals del joc.
+     * @param gameEnded Estat mutable que indica si la partida ha acabat.
+     */
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun LoadGameTabletLandscape(
@@ -891,6 +922,7 @@ class MainActivity : ComponentActivity() {
                     .fillMaxHeight()
                     .weight(1f)
                     .padding(top = 60.dp)
+                    .background(color = BlueLight)
             ) {
                 val cards: List<Cards> by memoryViewModel.getCards().observeAsState(listOf())
                 val cardImages: List<Painter> =
@@ -903,6 +935,7 @@ class MainActivity : ComponentActivity() {
                     .fillMaxHeight()
                     .weight(1f)
                     .padding(top = 60.dp)
+                    .background(color = BlueLight)
             ) {
                 item {
                     Text("Logs de la Partida", style = MaterialTheme.typography.headlineSmall)
@@ -926,6 +959,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Composable que mostra la pantalla de carregament del joc en mode retrat en una tauleta.
+     *
+     * Aquesta pantalla està dissenyada per a dispositius en mode retrat i mostra la graella de cartes a la part superior
+     * i els resultats de la partida a la part inferior. També gestiona la transició a la pantalla de final de partida
+     * quan la partida ha acabat.
+     *
+     * @param navController Controlador de navegació per a la navegació entre pantalles.
+     * @param gameFinished Indica si la partida ha acabat per causes naturals del joc.
+     * @param gameEnded Estat mutable que indica si la partida ha acabat.
+     */
     @RequiresApi(Build.VERSION_CODES.O)
     @Composable
     fun LoadGameTabletPortrait(
@@ -940,6 +984,7 @@ class MainActivity : ComponentActivity() {
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(top = 60.dp)
+                    .background(color = BlueLight)
             ) {
                 val cards: List<Cards> by memoryViewModel.getCards().observeAsState(listOf())
                 val cardImages: List<Painter> =
@@ -951,7 +996,8 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(top = 60.dp)
+                    //.padding(top = 60.dp)
+                    .background(color = BlueLight)
             ) {
                 item {
                     Text("Logs de la Partida", style = MaterialTheme.typography.headlineSmall)
@@ -1050,7 +1096,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
 
     /**
      * Funció Composable que mostra les cartes del joc de Memory en una graella.
@@ -1285,7 +1330,7 @@ class MainActivity : ComponentActivity() {
                 withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
                     append("Nom del jugador: ")
                 }
-                append("$playerName")
+                append(playerName)
             }
         )
         Spacer(modifier = Modifier.height(8.dp))
