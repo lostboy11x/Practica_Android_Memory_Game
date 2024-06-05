@@ -156,8 +156,6 @@ class MemoryViewModel : ViewModel() {
      * de les cartes que formin una parella.
      * @param id Identificador de la carta seleccionada.
      */
-
-
     @RequiresApi(Build.VERSION_CODES.O)
     fun updateVisibleCardStates(card: Cards) {
         val list = cartes.value?.map { it.copy() }?.toMutableList() ?: return
@@ -236,28 +234,3 @@ class MemoryViewModel : ViewModel() {
     }
 
 }
-
-
-/*
-   fun updateVisibleCardStates(id: String) {
-       val list: MutableList<Cards>? = cartes.value?.map { card ->
-           if (card.id == id) {
-               card.isSelected = true
-           }
-
-           card
-       } as MutableList<Cards>?
-       val selectedCards: List<Cards>? = list?.filter { it.isSelected }
-
-       if (selectedCards != null && selectedCards.size == 2) {
-           val areMatching =
-               selectedCards[0].imageResourceId == selectedCards[1].imageResourceId
-           if (areMatching) {
-               selectedCards.forEach { it.isMatched = true }
-           }
-           selectedCards.forEach { it.isSelected = false }
-       }
-       cartes.value?.removeAll { true }
-       cartes.value = list
-       gameFinished.value = allCardsMatched()
-   }*/
